@@ -15,7 +15,7 @@ namespace kv {
 class Transport {
  public:
   virtual ~Transport() = default;
-
+// = 0表示该函数是一个纯虚函数，该函数必须由派生类实现。
   virtual void start(const std::string& host) = 0;
 
   virtual void stop() = 0;

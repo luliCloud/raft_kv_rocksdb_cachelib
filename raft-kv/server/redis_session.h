@@ -45,3 +45,7 @@ class RedisSession : public std::enable_shared_from_this<RedisSession> {
 typedef std::shared_ptr<RedisSession> RedisSessionPtr;
 
 }
+/**
+ * 在 Redis 中，"session" 一般是指管理与客户端连接的会话。会话管理包括处理客户端请求、响应客户端、
+ * 维持连接状态等。在具体实现中，一个 Redis 会话（或连接）通常由一个会话对象（session object）来管理。
+ */

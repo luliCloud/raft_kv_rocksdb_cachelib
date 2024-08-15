@@ -9,7 +9,13 @@
 #include <raft-kv/common/random_device.h>
 
 namespace kv {
-
+/**
+ * Raft 类是一个实现了 Raft 共识算法的类。在分布式系统中，共识算法用于确保多个节点在没有
+ * 中央协调器的情况下达成一致。这在构建容错的分布式数据库、分布式文件系统等应用时尤为重要。
+ * Raft 算法是一个易于理解和实现的共识算法，旨在提供强一致性并简化领导者选举、日志复制和
+ * 成员管理等复杂操作。在Raft协议的实现中，Raft类通常表示一个特定节点（node）的状态和行为，
+ * 而不是整个集群的抽象概念。每个参与Raft集群的节点都会有自己的Raft实例来管理其自身的状态和操作。
+ */
 class Raft {
  public:
   explicit Raft(const Config& c);
@@ -168,6 +174,8 @@ class Raft {
   uint64_t max_msg_size_;
   uint64_t max_uncommitted_size_;
   uint64_t max_inflight_;
+  // key 代表的是follower node的id，value是指向Progress的ptr。Progress对象包含了该Follower Node的
+  // 日志复制进展，包括Next Index（当前最新日志idx + 1）和 matchIndex（与leader相同的最后一个idx）
   std::unordered_map<uint64_t, ProgressPtr> prs_;
   std::unordered_map<uint64_t, ProgressPtr> learner_prs_;
   std::vector<uint64_t> match_buf_;

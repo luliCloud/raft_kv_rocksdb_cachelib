@@ -33,22 +33,26 @@ void RaftLog::maybe_append(uint64_t index,
                            std::vector<proto::EntryPtr> entries,
                            uint64_t& last_new_index,
                            bool& ok) {
-  if (match_term(index, log_term)) {
-    uint64_t lastnewi = index + entries.size();
-    uint64_t ci = find_conflict(entries);
+  if (match_term(index, log_term)) {  // 如果日志index和log- term都与当前follower节点符合
+    uint64_t lastnewi = index + entries.size();  // 更新最新的日志index
+    uint64_t ci = find_conflict(entries); // ci返回的是冲突日志的idx（第一个）
+    // 但是根据find conflict的函数定义，这里找到的只会是第一个冲突的日志。后面如果还存在冲突的日志，可能就找不到。
+    // 所以可能从entries的最后开始找比较好？（改进）
     if (ci == 0) {
       //no conflict
-    } else if (ci <= committed_) {
+    } else if (ci <= committed_) { // 冲突的日志idx小于已经提交的最新日志idx
+    // committed_是在quorum中存在的最高的日志idx（已经存储在stable storage中）
       LOG_FATAL("entry %lu conflict with committed entry [committed(%lu)]", ci, committed_);
     } else {
       assert(ci > 0);
-      uint64_t offset = index + 1;
-      uint64_t n = ci - offset;
-      entries.erase(entries.begin(), entries.begin() + n);
+      uint64_t offset = index + 1; // entries的日志起始idx
+      uint64_t n = ci - offset;  // 冲突日志在entries中的位置
+      entries.erase(entries.begin(), entries.begin() + n); // 还未提交，所以根据ci抹去冲突的日志以及之前所有的日志，
+      // 再将剩下的日志移入follower节点的enttires中。
       append(std::move(entries));
     }
 
-    commit_to(std::min(committed, lastnewi));
+    commit_to(std::min(committed, lastnewi));  // 更新commit idx
 
     last_new_index = lastnewi;
     ok = true;

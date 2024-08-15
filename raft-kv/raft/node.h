@@ -5,7 +5,7 @@
 #include <raft-kv/raft/raft_status.h>
 
 namespace kv {
-
+// uint8_t它表示一个无符号的 8 位（一个字节）整型。
 typedef uint8_t SnapshotStatus;
 
 static const SnapshotStatus SnapshotFinish = 1;
@@ -22,13 +22,14 @@ class Node {
 
   // tick increments the internal logical clock for the Node by a single tick. Election
   // timeouts and heartbeat timeouts are in units of ticks.
-  virtual void tick() = 0;
+  virtual void tick() = 0; // = 0 必须在子类实现
 
   // campaign causes the Node to transition to candidate state and start campaigning to become leader.
   virtual Status campaign() = 0;
 
   // propose proposes that data be appended to the log. Note that proposals can be lost without
   // notice, therefore it is user's job to ensure proposal retries.
+  // 这个propose 和WAL 中propose加WAL的关系是？
   virtual Status propose(std::vector<uint8_t> data) = 0;
 
   // propose_conf_change proposes config change.

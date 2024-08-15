@@ -2,7 +2,7 @@
 #include <gtest/gtest.h>
 #include <raft-kv/server/redis_store.h>
 using namespace kv;
-
+/** 测试regex 匹配function */
 TEST(match, match) {
   struct Test {
     std::string pattern;

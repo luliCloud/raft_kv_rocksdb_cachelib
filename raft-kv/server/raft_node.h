@@ -8,6 +8,7 @@
 #include <raft-kv/server/redis_store.h>
 #include <raft-kv/wal/wal.h>
 #include <raft-kv/snap/snapshotter.h>
+#include <rocksdb/db.h>  // for rocksdb
 
 namespace kv {
 
@@ -18,6 +19,8 @@ class RaftNode : public RaftServer {
   explicit RaftNode(uint64_t id, const std::string& cluster, uint16_t port);
 
   ~RaftNode() final;
+
+  void deleteDatabase();
 
   void stop();
 
@@ -46,7 +49,7 @@ class RaftNode : public RaftServer {
   // replay_WAL replays WAL entries into the raft instance.
   void replay_WAL();
   // open_WAL opens a WAL ready for reading.
-  void open_WAL(const proto::Snapshot& snap);
+  void open_WAL(const proto::Snapshot& snap); // open the WAL based on snap as start point
 
   void schedule();
 
@@ -59,12 +62,14 @@ class RaftNode : public RaftServer {
   uint64_t last_index_;
   proto::ConfStatePtr conf_state_;
   uint64_t snapshot_index_;
-  uint64_t applied_index_;
+  // 已应用的索引是系统已经应用到状态记的最新日志条目的索引。换句话说，这是系统当前状态对应的的最新
+  // 日志条目的索引。所有索引小于或等于已应用索引的日志条目已经被系统处理并反映在当前的系统状态中。
+  uint64_t applied_index_; 
 
   MemoryStoragePtr storage_;
   std::unique_ptr<Node> node_;
   TransporterPtr transport_;
-  std::shared_ptr<RedisStore> redis_server_;
+  std::shared_ptr<RedisStore> redis_server_; // 指向RedisStore的指针
 
   std::vector<uint8_t> snap_data_;
   std::string snap_dir_;
@@ -73,6 +78,9 @@ class RaftNode : public RaftServer {
 
   std::string wal_dir_;
   WAL_ptr wal_;
+
+  std::string rocksdb_dir_;  // lu: for RocksDb
+  rocksdb::DB* db_;
 };
 typedef std::shared_ptr<RaftNode> RaftNodePtr;
 

@@ -5,7 +5,7 @@ set(LIBS
 
 enable_testing()
 find_package(GTest REQUIRED)
-
+# 添加测试可执行文件和库链接
 add_executable(test_msgpack test_msgpack.cpp)
 target_link_libraries(test_msgpack ${LIBS})
 gtest_add_tests(TARGET test_msgpack)

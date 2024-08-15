@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <raft-kv/common/bytebuffer.h>
-
+/** 
+这段测试代码是用来测试一个名为 ByteBuffer 的缓冲区类的功能。ByteBuffer 类提供了一些方法来存储、读取和操作字节数据。
+通过以下几个操作和断言，这个测试验证了 ByteBuffer 的基本功能，如写入数据、读取数据、检查可读字节数等。 */
 using namespace kv;
 
 TEST(test_buffer, test_buffer) {

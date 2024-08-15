@@ -187,7 +187,7 @@ struct HardState {
   }
 
   uint64_t term;
-  uint64_t vote;
+  uint64_t vote; // 当前任期内节点投票给的候选者ID
   uint64_t commit;
   MSGPACK_DEFINE (term, vote, commit);
 };

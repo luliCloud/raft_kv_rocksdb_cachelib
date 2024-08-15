@@ -4,8 +4,16 @@
 #include <raft-kv/common/status.h>
 #include <stdio.h>
 
+/**
+ * 在 Raft 分布式一致性算法中，WAL（Write-Ahead Log）起到了关键作用。
+ * WAL 的主要功能是在处理客户端请求并更新系统状态之前，将这些操作日志记录到持久存储中，
+ * 以确保即使在系统崩溃或故障时，也可以从这些日志中恢复系统状态，保证数据的一致性和可靠性。
+ */
 namespace kv {
 
+/**
+ * 保存日志快照。包括该日志的idx和任期
+ */
 struct WAL_Snapshot {
   uint64_t index;
   uint64_t term;
@@ -13,8 +21,11 @@ struct WAL_Snapshot {
 };
 
 typedef uint8_t WAL_type;
-
+// #pragma pack:用于设置结构体成员的对齐方式。可以减少内存浪费，但可能会导致访问效率下降。
 #pragma pack(1)
+/**
+ * 用于表示一个日志记录的结构，包含记录类型、长度和数据等信息。
+ */
 struct WAL_Record {
   WAL_type type;  /*the data type*/
   uint8_t len[3]; /*the data length, max len: 0x00FFFFFF*/
@@ -37,7 +48,7 @@ static inline void set_WAL_Record_len(WAL_Record& record, uint32_t len) {
 }
 
 class WAL_File;
-
+/* 提供了创建、打开、读取、保存日志记录和快照等操作的接口。*/
 class WAL;
 typedef std::shared_ptr<WAL> WAL_ptr;
 class WAL {
