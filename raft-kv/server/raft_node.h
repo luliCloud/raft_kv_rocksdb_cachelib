@@ -20,8 +20,6 @@ class RaftNode : public RaftServer {
 
   ~RaftNode() final;
 
-  void deleteDatabase();
-
   void stop();
 
   void propose(std::shared_ptr<std::vector<uint8_t>> data, const StatusCallback& callback);
@@ -79,8 +77,10 @@ class RaftNode : public RaftServer {
   std::string wal_dir_;
   WAL_ptr wal_;
 
-  std::string rocksdb_dir_;  // lu: for RocksDb
+// lu: for RocksDb
+  std::string rocksdb_dir_;  
   rocksdb::DB* db_;
+  void deleteDatabase();  // for rocksdb
 };
 typedef std::shared_ptr<RaftNode> RaftNodePtr;
 

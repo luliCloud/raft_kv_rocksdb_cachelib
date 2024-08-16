@@ -18,7 +18,6 @@ static uint64_t defaultSnapCount = 100000;
 static uint64_t snapshotCatchUpEntriesN = 100000;
 
 // RaftNode:: is a class. 这三个变量从raft-kv的main()读进来. constructor for RaftNode class
-/** For Rocksdb extension: we will create rocksdb here */
 RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
     : port_(port),
       pthread_id_(0),
@@ -46,6 +45,14 @@ RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
   rocksdb_dir_ = work_dir + "/db";
   rocksdb::Options options;
   options.create_if_missing = true;
+  /** create this path not exist */
+  if (!boost::filesystem::exists(rocksdb_dir_)) {
+    boost::filesystem::create_directories(rocksdb_dir_);
+  }
+  // /** to find the db location */
+  // boost::filesystem::path abs_work_dir = boost::filesystem::absolute(rocksdb_dir_);
+  // LOG_INFO("Absolute path: %s", abs_work_dir.c_str());
+
   rocksdb::Status st = rocksdb::DB::Open(options, rocksdb_dir_, &db_);
   if (!st.ok()) {
     throw std::runtime_error("Failed to open RocksDB: " + st.ToString());
@@ -104,12 +111,7 @@ void RaftNode::deleteDatabase() {
     throw std::runtime_error("Failed to destroy RocksDB: " + status.ToString());
   }
 }
-
 RaftNode::~RaftNode() {
-  // for rocksdb
-  LOG_DEBUG("stopped database and delete");
-  deleteDatabase();
-
   LOG_DEBUG("stopped");
   if (transport_) {
     transport_->stop();
