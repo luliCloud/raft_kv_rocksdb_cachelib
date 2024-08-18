@@ -86,10 +86,14 @@ class RedisStore {
 /** 处理提交的日志条目 */
   void read_commit(proto::EntryPtr entry);
 
+/** for rocksdb snapshot generate*/
+  void createRocksDBCheckpoint();
+
  private:
   void start_accept(); // 开始接受client连接
 
-  RaftNode* server_;  // 指向RaftNode实例的指针，表示当前节点
+  RaftNode* server_;  // 指向RaftNode实例的指针，表示当前节点。在这里与Raft Node相连。我们可以获取
+  // rocksdb的指针和存储位置。
   boost::asio::io_service io_service_; // Boost.Asio的I/O服务对象，用于处理异步I/O操作
   boost::asio::ip::tcp::acceptor acceptor_; // TCP接受器，用于接受网络连接
   std::thread worker_;  // 工作线程，用于处理I/O事件

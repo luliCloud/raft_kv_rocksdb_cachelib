@@ -3,6 +3,7 @@
 #include <raft-kv/server/raft_node.h>
 #include <raft-kv/common/log.h>
 #include <raft-kv/server/redis_session.h>
+#include <rocksdb/utilities/checkpoint.h>  // for rocksdb snapshot the db in binary file
 /** 
  * RaftNode 中的redis_server_实际上就是指向Redis_store的指针。因此这个类应该就是负责接收Raft Commit的
  * 数据以及与Redis数据库的交互
@@ -146,10 +147,11 @@ RedisStore::RedisStore(RaftNode* server, std::vector<uint8_t> snap, uint16_t por
   if (!snap.empty()) { // 如果传进来的snap不为空
     std::unordered_map<std::string, std::string> kv;
     msgpack::object_handle oh = msgpack::unpack((const char*) snap.data(), snap.size());
+
     try {
       oh.get().convert(kv);
     } catch (std::exception& e) {
-      LOG_WARN("invalid snapshot");
+      LOG_WARN("invalid snapshot: %s", e.what()); // for test
     }
     std::swap(kv, key_values_); // 用kv mp 值replace key_value_。snap代表最新的状态
   }
@@ -252,6 +254,28 @@ void RedisStore::del(std::vector<std::string> keys, const StatusCallback& callba
     });
   });
 }
+
+/** for generate rocksdb checkpoint */
+void RedisStore::createRocksDBCheckpoint() {
+  rocksdb::Checkpoint* checkpoint;
+  rocksdb::DB* db = server_->getDB();  // get *db
+  const std::string& dir = server_->getDir(); // get path to db
+
+  rocksdb::Status status = rocksdb::Checkpoint::Create(db, &checkpoint);
+  if (!status.ok()) {
+    LOG_ERROR("Cannot open the database.");
+    return;
+  }
+  
+  status = checkpoint->CreateCheckpoint(dir);
+  delete checkpoint;
+  if (!status.ok()) {
+    LOG_ERROR("Cannot create snapshot of rocksdb.");
+    return;
+  }
+}
+
+
 /** 根据现在的key value map创建新的snapshot */
 void RedisStore::get_snapshot(const GetSnapshotCallback& callback) {
   io_service_.post([this, callback] {
