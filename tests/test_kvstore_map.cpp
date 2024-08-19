@@ -13,35 +13,6 @@
 #include <unordered_map>
 using namespace kv;
 
-// /** two method to generate snapshot. 1. generate tmp snapshot dir */
-// static std::string get_tmp_snapshot_dir() {
-//   char buffer[128];
-//   // time(NULL) return current time (second), getpid() return current process id. 
-//   // snprintf convert timestamp and pid to string, and combind as a dir
-//   // return dir is "_test_snapshot/time_pid", ensure every test generate unique dir
-//   snprintf(buffer, sizeof(buffer), "_test_snapshot/%d_%d", (int) time(NULL), getpid());
-//   return buffer;
-// }
-
-// proto::Snapshot& get_test_snap() {
-//   static proto::SnapshotPtr snap;
-//   if (!snap) {
-//     snap = std::make_shared<proto::Snapshot>();
-//     snap->metadata.index = 1;
-//     snap->metadata.term = 1;
-    
-//     snap->data.push_back('t');
-//     snap->data.push_back('e');
-//     snap->data.push_back('s');
-//     snap->data.push_back('t');
-
-//     snap->metadata.conf_state.nodes.push_back(1);
-//     snap->metadata.conf_state.nodes.push_back(2);
-//     snap->metadata.conf_state.nodes.push_back(3);
-//   }
-//   return *snap;
-// }
-
 // easier way to generate snapshot and initialize raftnode
 // noting struct snapshot in proto.h
 static proto::Snapshot& testingSnap() {
@@ -63,12 +34,12 @@ static proto::Snapshot& testingSnap() {
 }
 
 TEST(RedisStoreTest, InitializeRedis) {
-    proto::Snapshot& snapshot = testingSnap();
-    // serialize snapshot data. noting that kv data put in snapshot need serialize
-    // then snapshot need another serialize as a whole
+    proto::Snapshot& snapshot = testingSnap(); // noting we just need the serialized kv from 
+    // this snapshot for starting redis_store.
 
     // using snapshot to initialize TestRaftNode and RedisStore
-    RaftNode raft_node(1, "/tmp", 8080);
+    RaftNode raft_node(1, "/tmp", 8080); // 注意实际上我们会有专门的snap-dir存储快照，所以如果有已有的快照
+    // 那么会从这个dir中找到。并且获取最新的一个快照（sort and greater）。但是我们这里为了简化，直接传入了我们创建的snapshot
     RedisStore redis_store(&raft_node, snapshot.data, 8080); // noting the 2nd para is kv (data part of snapshot)
 
     // check whether raft_node_ key and value is what we put before
