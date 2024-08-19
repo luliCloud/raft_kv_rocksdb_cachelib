@@ -14,8 +14,10 @@ namespace kv {
 // uint64_t, 无符号64位整型
 // 这些类型通过 typedef 定义，是标准整数类型的别名，确保在不同平台上具有相同的大小和语义。
 // 例如，在 32 位和 64 位系统上，uint64_t 始终是 64 位长的无符号整数​
-static uint64_t defaultSnapCount = 100000;
-static uint64_t snapshotCatchUpEntriesN = 100000;
+// static uint64_t defaultSnapCount = 100000;
+// static uint64_t snapshotCatchUpEntriesN = 100000;
+static uint64_t defaultSnapCount = 3;
+static uint64_t snapshotCatchUpEntriesN = 2;
 
 // RaftNode:: is a class. 这三个变量从raft-kv的main()读进来. constructor for RaftNode class
 RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
@@ -255,7 +257,7 @@ void RaftNode::replay_WAL() {
 
   proto::Snapshot snapshot;
   Status status = snapshotter_->load(snapshot);
-  if (!status.is_ok()) {
+  if (!status.is_ok()) { 
     if (status.is_not_found()) {
       LOG_INFO("snapshot not found for node %lu", id_);
     } else {
@@ -386,8 +388,8 @@ void RaftNode::maybe_trigger_snapshot() {
   std::promise<SnapshotDataPtr> promise;
   std::future<SnapshotDataPtr> future = promise.get_future();
 /**
- * redis_server_->get_snapshot 是获取当前redos-server上的最新快照数据。因为涉及到i/o或其他耗时操作，因此
- * 使用异步方法，避免阻塞住县城。snapshot获取完成后。通过promise.set)_value 将数据传回主线程
+ * redis_server_->get_snapshot 是获取当前redis-server上的最新快照数据。因为涉及到i/o或其他耗时操作，因此
+ * 使用异步方法，避免阻塞住thread。snapshot获取完成后。通过promise.set)_value 将数据传回主线程
  * 通过从 Redis 服务器获取快照，可以确保所有节点获取到的是一致的快照数据，
  * 避免因节点本地生成快照时的延迟导致的数据不一致问题。
  */
@@ -408,6 +410,13 @@ void RaftNode::maybe_trigger_snapshot() {
   if (!status.is_ok()) {
     LOG_FATAL("save snapshot error %s", status.to_string().c_str());
   }
+/** defaultSnapCount控制我们多少个log产生一个compact snapshot。比如我们现在设为4，那么每四个产生一个snapshot
+ * snapshotCatchUpEntriesN 控制我们删除前多少个log。两个都通过 maybe_trigger_snapshot() 
+ * 比如我们将snapshotCatchUpEntriesN设为2. 那么当现在的applied_index_ - (last) snapshot_index_ > 4
+ * 则会产生一个snapshot。也就是当第五个entry（applied_index_）发生时，前四个产生snapshot。
+ * 同时 compactIndx = 5 - 2 = 3,
+ * 也就是说Index = 3 以前的日志会被删除（3自己不会删掉，同时3成为arr第0位）。这就是compact
+ */
 // 压缩日志条目。这里的逻辑就是每次就删除snapshot cnt规定的那么多的最前面的条目。compactIdx是绝对值
 // applied index = 1100, snapshotCatchUpEntiresN = 1000. compactIdx = 100. delete 0-100 entries
 // applied index = 1200, snapshotCatchUpentriesN = 1000, compactIdx = 200. delete 0-200 entreis. 
@@ -441,7 +450,7 @@ void RaftNode::schedule() {
 2. 内存存储加载数据：MemoryStorage 被初始化时，从持久化存储加载快照和日志数据。
 3. Raft 节点初始化：RaftNode 在初始化过程中，从 MemoryStorage 中获取当前快照数据。
    */
-  Status status = storage_->snapshot(snap); // 获取目前内存中的snapshot到变量snap中
+  Status status = storage_->snapshot(snap); // 获取目前内存中的snapshot到变量snap中。注意在
   if (!status.is_ok()) {
     LOG_FATAL("get snapshot failed %s", status.to_string().c_str());
   }
@@ -456,6 +465,10 @@ void RaftNode::schedule() {
 // 不必要的拷贝。一旦完成转移，RaftNode中的快照将变为空。（注意不是整个RaftNode变为空，只将SnapData 
 // 转移给Redis Server，因为它的存储和访问效率更高）
 // port_是一个整数。表示Redis 服务器将监听的端口号
+
+/** Lu:将快照数据传递给 RedisStore 的 snap_data_*/
+  snap_data_ = std::move(snap->data);
+
   redis_server_ = std::make_shared<RedisStore>(this, std::move(snap_data_), port_);
   // 启动Redis 服务器
   std::promise<pthread_t> promise; // 启动promise和future对象，用于异步启动Redis服务器

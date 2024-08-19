@@ -80,7 +80,7 @@ void Snapshotter::get_snap_names(std::vector<std::string>& names) {
   }
   std::sort(names.begin(), names.end(), std::greater<std::string>());
 }
-
+/** for initalize raftnode snapshot */
 Status Snapshotter::load_snap(const std::string& filename, proto::Snapshot& snapshot) {
   using namespace boost;
   SnapshotRecord snap_hdr;
