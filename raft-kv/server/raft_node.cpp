@@ -43,22 +43,22 @@ RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
   snap_dir_ = work_dir + "/snap";
   wal_dir_ = work_dir + "/wal";
 
-  /** Rocksdb: create rocksdb db based on node id, noting word_dir already node specific */
-  rocksdb_dir_ = work_dir + "/db";
-  rocksdb::Options options;
-  options.create_if_missing = true;
-  /** create this path not exist */
-  if (!boost::filesystem::exists(rocksdb_dir_)) {
-    boost::filesystem::create_directories(rocksdb_dir_);
-  }
-  // /** to find the db location */
-  // boost::filesystem::path abs_work_dir = boost::filesystem::absolute(rocksdb_dir_);
-  // LOG_INFO("Absolute path: %s", abs_work_dir.c_str());
+  // /** Rocksdb: create rocksdb db based on node id, noting word_dir already node specific */
+  // rocksdb_dir_ = work_dir + "/db";
+  // rocksdb::Options options;
+  // options.create_if_missing = true;
+  // /** create this path not exist */
+  // if (!boost::filesystem::exists(rocksdb_dir_)) {
+  //   boost::filesystem::create_directories(rocksdb_dir_);
+  // }
+  // // /** to find the db location */
+  // // boost::filesystem::path abs_work_dir = boost::filesystem::absolute(rocksdb_dir_);
+  // // LOG_INFO("Absolute path: %s", abs_work_dir.c_str());
 
-  rocksdb::Status st = rocksdb::DB::Open(options, rocksdb_dir_, &db_);
-  if (!st.ok()) {
-    throw std::runtime_error("Failed to open RocksDB: " + st.ToString());
-  }
+  // rocksdb::Status st = rocksdb::DB::Open(options, rocksdb_dir_, &db_);
+  // if (!st.ok()) {
+  //   throw std::runtime_error("Failed to open RocksDB: " + st.ToString());
+  // }
 
   if (!boost::filesystem::exists(snap_dir_)) {
     boost::filesystem::create_directories(snap_dir_);
@@ -102,17 +102,17 @@ RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
   }
 }
 /** for Rocksdb */
-void RaftNode::deleteDatabase() {
-  delete db_;  // release ptr
-  db_ = nullptr;
+// void RaftNode::deleteDatabase() {
+//   delete db_;  // release ptr
+//   db_ = nullptr;
 
-  // destroy database
-  rocksdb::Options options;
-  rocksdb::Status status = rocksdb::DestroyDB(rocksdb_dir_, options);
-  if (!status.ok()) {
-    throw std::runtime_error("Failed to destroy RocksDB: " + status.ToString());
-  }
-}
+//   // destroy database
+//   rocksdb::Options options;
+//   rocksdb::Status status = rocksdb::DestroyDB(rocksdb_dir_, options);
+//   if (!status.ok()) {
+//     throw std::runtime_error("Failed to destroy RocksDB: " + status.ToString());
+//   }
+// }
 RaftNode::~RaftNode() {
   LOG_DEBUG("stopped");
   if (transport_) {
@@ -393,7 +393,7 @@ void RaftNode::maybe_trigger_snapshot() {
  * 通过从 Redis 服务器获取快照，可以确保所有节点获取到的是一致的快照数据，
  * 避免因节点本地生成快照时的延迟导致的数据不一致问题。
  */
-  redis_server_->get_snapshot(std::move([&promise](const SnapshotDataPtr& data) {
+  redis_server_->get_snapshot(std::move([&promise](const SnapshotDataPtr& data) {  // 接入rocksdb 则需要改成 get_checkpoint
     promise.set_value(data);
   }));
 
@@ -469,7 +469,7 @@ void RaftNode::schedule() {
 /** Lu:将快照数据传递给 RedisStore 的 snap_data_*/
   snap_data_ = std::move(snap->data);
 
-  redis_server_ = std::make_shared<RedisStore>(this, std::move(snap_data_), port_);
+  redis_server_ = std::make_shared<RedisStore>(this, std::move(snap_data_), port_, id_);
   // 启动Redis 服务器
   std::promise<pthread_t> promise; // 启动promise和future对象，用于异步启动Redis服务器
   std::future<pthread_t> future = promise.get_future();

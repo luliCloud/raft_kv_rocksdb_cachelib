@@ -51,7 +51,7 @@ typedef std::function<void(SnapshotDataPtr)> GetSnapshotCallback; // 用于处�
 class RaftNode;
 class RedisStore {
  public:
-  explicit RedisStore(RaftNode* server, std::vector<uint8_t> snap, uint16_t port);
+  explicit RedisStore(RaftNode* server, std::vector<uint8_t> snap, uint16_t port, uint64_t id);
 
   ~RedisStore();
 /** 停止I/O服务并等待工作线程结束 */
@@ -101,6 +101,9 @@ class RedisStore {
 
   uint32_t next_request_id_;  // 下一个请求的ID
   std::unordered_map<uint32_t, StatusCallback> pending_requests_;  // 存储挂起请求的回调函数
+
+  std::string rocksdb_dir_;
+  rocksdb::DB* db_;
 };
 
 }

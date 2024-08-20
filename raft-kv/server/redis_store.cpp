@@ -4,6 +4,8 @@
 #include <raft-kv/common/log.h>
 #include <raft-kv/server/redis_session.h>
 #include <rocksdb/utilities/checkpoint.h>  // for rocksdb snapshot the db in binary file
+#include <boost/filesystem.hpp>
+#include <boost/algorithm/string.hpp>
 /** 
  * RaftNode 中的redis_server_实际上就是指向Redis_store的指针。因此这个类应该就是负责接收Raft Commit的
  * 数据以及与Redis数据库的交互
@@ -139,10 +141,25 @@ int string_match_len(const char* pattern, int patternLen,
 /** constructor从snapshot中恢复KV store 的数据。注意Redis kv store主要通过快照来恢复数据存储
  * 所有的数据都会存在快照中。导致快照会变的很大，所以需要定期compact和清理
  * 同时用boost::asio::acceptor开始监听指定的port */
-RedisStore::RedisStore(RaftNode* server, std::vector<uint8_t> snap, uint16_t port)
+RedisStore::RedisStore(RaftNode* server, std::vector<uint8_t> snap, uint16_t port, uint64_t id)
     : server_(server),
       acceptor_(io_service_),
       next_request_id_(0) {
+
+  std::string work_dir = "node_" + std::to_string(id);
+  /** Rocksdb: create rocksdb db based on node id, noting work_dir already node specific */
+  rocksdb_dir_ = work_dir + "/db";
+  rocksdb::Options options;
+  options.create_if_missing = true;
+  /** create this path not exist */
+  if (!boost::filesystem::exists(rocksdb_dir_)) {
+    boost::filesystem::create_directories(rocksdb_dir_);
+  }
+
+  rocksdb::Status st = rocksdb::DB::Open(options, rocksdb_dir_, &db_);
+  if (!st.ok()) {
+    throw std::runtime_error("Failed to open RocksDB: " + st.ToString());
+  }
 
   if (!snap.empty()) { // 如果传进来的snap不为空
     std::unordered_map<std::string, std::string> kv;
@@ -258,16 +275,14 @@ void RedisStore::del(std::vector<std::string> keys, const StatusCallback& callba
 /** for generate rocksdb checkpoint */
 void RedisStore::createRocksDBCheckpoint() {
   rocksdb::Checkpoint* checkpoint;
-  rocksdb::DB* db = server_->getDB();  // get *db
-  const std::string& dir = server_->getDir(); // get path to db
 
-  rocksdb::Status status = rocksdb::Checkpoint::Create(db, &checkpoint);
+  rocksdb::Status status = rocksdb::Checkpoint::Create(db_, &checkpoint);
   if (!status.ok()) {
     LOG_ERROR("Cannot open the database.");
     return;
   }
-  
-  status = checkpoint->CreateCheckpoint(dir);
+  std::string checkpoint_dir = rocksdb_dir_ + std::to_string(std::time(nullptr));
+  status = checkpoint->CreateCheckpoint(checkpoint_dir);
   delete checkpoint;
   if (!status.ok()) {
     LOG_ERROR("Cannot create snapshot of rocksdb.");
