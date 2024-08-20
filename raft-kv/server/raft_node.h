@@ -38,9 +38,9 @@ class RaftNode : public RaftServer {
   void entries_to_apply(const std::vector<proto::EntryPtr>& entries, std::vector<proto::EntryPtr>& ents);
   void maybe_trigger_snapshot();
 
-  void deleteDatabase();  // for rocksdb
-  rocksdb::DB* getDB() const { return db_; }
-  const std::string& getDir() const { return rocksdb_dir_; }
+  // void deleteDatabase();  // for rocksdb
+  // rocksdb::DB* getDB() const { return db_; }
+  // const std::string& getDir() const { return rocksdb_dir_; }
 
  private:
   void start_timer();
@@ -80,10 +80,6 @@ class RaftNode : public RaftServer {
 
   std::string wal_dir_;
   WAL_ptr wal_;
-
-// lu: for RocksDb
-  std::string rocksdb_dir_;  
-  rocksdb::DB* db_;
 };
 typedef std::shared_ptr<RaftNode> RaftNodePtr;
 
