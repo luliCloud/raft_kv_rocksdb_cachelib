@@ -8,7 +8,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include <rocksdb/utilities/checkpoint.h>  // for rocksdb snapshot the db in binary file
-#include <rocksdb/options.h> // for rocksdb
+
 #include <rocksdb/iterator.h>  // for rocksdb
 #include <rocksdb/write_batch.h> // for rocksdb
 
@@ -167,7 +167,7 @@ RedisStore::RedisStore(RaftNode* server, std::vector<uint8_t> snap, uint16_t por
     throw std::runtime_error("Failed to open RocksDB: " + st.ToString());
   }
 
-  if (!snap.empty()) { // 如果传进来的snap不为空
+  if (!snap.empty()) { // 如果传进来的snap不为空. for rocksdb we need to modify here !
     std::unordered_map<std::string, std::string> kv;
     msgpack::object_handle oh = msgpack::unpack((const char*) snap.data(), snap.size());
 
@@ -335,7 +335,30 @@ sbuf.data() + sbuf.size() 是结束指针，指向 sbuf 中数据的结束位置
 
 // using write_batch to read kv data from msgpack serialized data and merge into local database (include write, delete, udpate kv)
 void RedisStore::load_kv_to_rocksdb(const std::vector<std::pair<std::string, std::string>>& key_values) {
-  rocksdb::WriteBatch batch;
+  // delete operation is not included in batch operation. we need to delete by ourselves
+  std::vector<std::string> keys_to_delete;
+  rocksdb::Iterator* it = db_->NewIterator(rocksdb::ReadOptions());
+  // iterate the current kv store, if any key is not in key_values, delete it
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    std::string key = it->key().ToString();
+    bool found = false;
+    for (const auto& kv : key_values) {
+      if (kv.first == key) {
+        found = true;  // found, not need to delete
+        break;
+      }
+      if (!found) {
+        keys_to_delete.push_back(key);
+      }
+    }
+  }
+  delete it;
+
+  rocksdb::WriteBatch batch; // we will put all we need to delete and insert in batch, and pass to the batchWriter
+  // We lable the data as Delete or Put. Put is for udpate or insert
+  for (const std::string& key : keys_to_delete) {
+    batch.Delete(key);
+  }
   for (const auto& kv : key_values) {
     batch.Put(kv.first, kv.second);
   }
@@ -347,6 +370,16 @@ void RedisStore::load_kv_to_rocksdb(const std::vector<std::pair<std::string, std
   } else {
     LOG_INFO("Data loaded successfully.");
   }
+}
+
+rocksdb::Status RedisStore::putKV(const rocksdb::WriteOptions& options, const std::string& key, const std::string& value) {
+  rocksdb::Status status = db_->Put(options, key, value);
+  return status;
+}
+
+rocksdb::Status RedisStore::getKV(const rocksdb::ReadOptions& options, const std::string& key, std::string& value) {
+  rocksdb::Status status = db_->Get(options, rocksdb::Slice(key), &value);
+  return status;
 }
 
 // 从snapshot中恢复KV的值，替换现有的kv store

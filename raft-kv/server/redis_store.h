@@ -1,12 +1,15 @@
 #pragma once
 #include <boost/asio.hpp>
 #include <unordered_map> // we will change this to rocksdb
-#include <rocksdb/db.h>  //Todo: we need to add path of rocksdb to CMakelist file later 
+
 #include <thread>
 #include <future>
 #include <raft-kv/common/status.h>
 #include <raft-kv/raft/proto.h>
 #include <msgpack.hpp>
+
+#include <rocksdb/db.h>  //Todo: we need to add path of rocksdb to CMakelist file later 
+#include <rocksdb/options.h> // for rocksdb
 /** 这段代码定义了名为RedisStore的类，用于实现分布式系统中的数据存储和处理逻辑,其中Redis被用作底层
  * 的数据存储(是缓存形式的存储，因此write-read速度极快)。
  * 我们在这里将它替换成rocksdb，永久性存储？
@@ -60,6 +63,8 @@ class RedisStore {
     if (worker_.joinable()) {
       worker_.join();
     }
+    // for rocksdb
+    delete db_;
   }
 /** 启动服务，并通过promise返回线程ID */
   void start(std::promise<pthread_t>& promise);
@@ -90,6 +95,8 @@ class RedisStore {
   void createRocksDBCheckpoint();
   void get_all_key_value(std::vector<std::pair<std::string, std::string>>& key_values);
   void load_kv_to_rocksdb(const std::vector<std::pair<std::string, std::string>>& key_values);
+  rocksdb::Status putKV(const rocksdb::WriteOptions& options, const std::string& key, const std::string& value);
+  rocksdb::Status getKV(const rocksdb::ReadOptions& options, const std::string& key, std::string& value);
 
  private:
   void start_accept(); // 开始接受client连接
@@ -105,7 +112,7 @@ class RedisStore {
   std::unordered_map<uint32_t, StatusCallback> pending_requests_;  // 存储挂起请求的回调函数
 
   std::string rocksdb_dir_;
-  rocksdb::DB* db_;
+  rocksdb::DB* db_;  // 注意已经是指针了，所以内部不要再带星号
 };
 
 }
