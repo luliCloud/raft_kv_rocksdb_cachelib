@@ -3,9 +3,15 @@
 #include <raft-kv/server/raft_node.h>
 #include <raft-kv/common/log.h>
 #include <raft-kv/server/redis_session.h>
-#include <rocksdb/utilities/checkpoint.h>  // for rocksdb snapshot the db in binary file
+
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
+
+#include <rocksdb/utilities/checkpoint.h>  // for rocksdb snapshot the db in binary file
+#include <rocksdb/options.h> // for rocksdb
+#include <rocksdb/iterator.h>  // for rocksdb
+#include <rocksdb/write_batch.h> // for rocksdb
+
 /** 
  * RaftNode 中的redis_server_实际上就是指向Redis_store的指针。因此这个类应该就是负责接收Raft Commit的
  * 数据以及与Redis数据库的交互
@@ -157,7 +163,7 @@ RedisStore::RedisStore(RaftNode* server, std::vector<uint8_t> snap, uint16_t por
   }
 
   rocksdb::Status st = rocksdb::DB::Open(options, rocksdb_dir_, &db_);
-  if (!st.ok()) {
+  if (!st.ok()) { // 这里就已经读到了自己的database，即使重启。
     throw std::runtime_error("Failed to open RocksDB: " + st.ToString());
   }
 
@@ -290,12 +296,30 @@ void RedisStore::createRocksDBCheckpoint() {
   }
 }
 
+/** read all key-value pairs from current rocksdb to key_values */
+void RedisStore::get_all_key_value(std::vector<std::pair<std::string, std::string>>& key_values) {
+  rocksdb::ReadOptions read_options;
+  std::unique_ptr<rocksdb::Iterator> it(db_->NewIterator(read_options));
+
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    std::string key = it->key().ToString();
+    std::string value = it->value().ToString();
+    key_values.push_back({key, value});
+  }
+
+  if (!it->status().ok()) {
+    LOG_ERROR("An error occurred during iteration: %s", it->status().ToString());
+  }
+}
 
 /** 根据现在的key value map创建新的snapshot */
 void RedisStore::get_snapshot(const GetSnapshotCallback& callback) {
   io_service_.post([this, callback] {
     msgpack::sbuffer sbuf;
-    msgpack::pack(sbuf, this->key_values_);
+    // for rocksdbm we use vector<>
+    std::vector<std::pair<std::string, std::string>> key_values;
+    msgpack::pack(sbuf, key_values_);
+    // msgpack::pack(sbuf, key_values);  // modify here!
     /**
      * SnapshotDataPtr 是一个类型定义，表示一个 std::shared_ptr，指向 std::vector<uint8_t> 类型的对象。
 std::vector<uint8_t> 是一个动态数组，专门用于存储字节数据（uint8_t 是表示 8 位无符号整数的类型，
@@ -308,6 +332,23 @@ sbuf.data() + sbuf.size() 是结束指针，指向 sbuf 中数据的结束位置
     callback(data);
   });
 }
+
+// using write_batch to read kv data from msgpack serialized data and merge into local database (include write, delete, udpate kv)
+void RedisStore::load_kv_to_rocksdb(const std::vector<std::pair<std::string, std::string>>& key_values) {
+  rocksdb::WriteBatch batch;
+  for (const auto& kv : key_values) {
+    batch.Put(kv.first, kv.second);
+  }
+
+  rocksdb::WriteOptions write_options;
+  rocksdb::Status status = db_->Write(write_options, &batch);
+  if (!status.ok()) {
+    LOG_ERROR("Failed to write batch: %s", status.ToString());
+  } else {
+    LOG_INFO("Data loaded successfully.");
+  }
+}
+
 // 从snapshot中恢复KV的值，替换现有的kv store
 /**
  * constructor：初始化节点状态：当一个Raft节点启动时，它需要从持久化存储中恢复之前的状态，
@@ -317,7 +358,9 @@ sbuf.data() + sbuf.size() 是结束指针，指向 sbuf 中数据的结束位置
  */
 void RedisStore::recover_from_snapshot(SnapshotDataPtr snap, const StatusCallback& callback) {
   io_service_.post([this, snap, callback] {
-    std::unordered_map<std::string, std::string> kv;
+    std::unordered_map<std::string, std::string> kv; // original kv map
+
+    // std::vector<std::pair<std::string, std::string>> key_values;  // rocksdb kv pair
     msgpack::object_handle oh = msgpack::unpack((const char*) snap->data(), snap->size());
     try {
       oh.get().convert(kv);
@@ -326,6 +369,8 @@ void RedisStore::recover_from_snapshot(SnapshotDataPtr snap, const StatusCallbac
       return;
     }
     std::swap(kv, key_values_);
+    /** rocksdb, read this into db, using WriteBatch */
+    
     callback(Status::ok());
   });
 }

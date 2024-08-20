@@ -400,7 +400,7 @@ void RaftNode::maybe_trigger_snapshot() {
   future.wait(); // 等待快照数据的获取完成，并通过future.get()获取快照数据
   SnapshotDataPtr snapshot_data = future.get();
 
-  proto::SnapshotPtr snap; // 在内存中创建新的快照，根据现在的状态
+  proto::SnapshotPtr snap; // 在内存中创建新的快照，根据现在的状态.查看一下是否有kv store。 Snapshot中的data是vector<uint_8>.应该可以直接存储
   Status status = storage_->create_snapshot(applied_index_, conf_state_, *snapshot_data, snap);
   if (!status.is_ok()) {
     LOG_FATAL("create snapshot error %s", status.to_string().c_str());

@@ -88,6 +88,8 @@ class RedisStore {
 
 /** for rocksdb snapshot generate*/
   void createRocksDBCheckpoint();
+  void get_all_key_value(std::vector<std::pair<std::string, std::string>>& key_values);
+  void load_kv_to_rocksdb(const std::vector<std::pair<std::string, std::string>>& key_values);
 
  private:
   void start_accept(); // 开始接受client连接
