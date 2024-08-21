@@ -67,3 +67,7 @@ target_link_libraries(test_kvstore_map ${LIBS})
 # 框架编写的测试函数（例如 TEST() 宏定义的测试），并将这些测试用例注册到 ctest 测试工具中。
 gtest_add_tests(TARGET test_kvstore_map)
 
+# for gtest and test_resdis_store_rocksdb
+add_executable(test_kvstore_rocksdb test_kvstore_rocksdb.cpp)
+target_link_libraries(test_kvstore_rocksdb ${LIBS}) 
+gtest_add_tests(TARGET test_kvstore_rocksdb)
