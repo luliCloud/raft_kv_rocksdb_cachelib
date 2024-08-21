@@ -72,7 +72,7 @@ bring the node back up and verify it recovers with the updated value "new-value"
     "new-value"
 
 ### test for rocksdb
-
+To run all test after build, please run `ctest` in build dir. 
     
 ### benchmark
 
