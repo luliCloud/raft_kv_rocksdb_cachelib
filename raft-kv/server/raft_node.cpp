@@ -16,8 +16,8 @@ namespace kv {
 // 例如，在 32 位和 64 位系统上，uint64_t 始终是 64 位长的无符号整数​
 static uint64_t defaultSnapCount = 100000;
 static uint64_t snapshotCatchUpEntriesN = 100000;
-// static uint64_t defaultSnapCount = 3;
-// static uint64_t snapshotCatchUpEntriesN = 2;
+// static uint64_t defaultSnapCount = 2;
+// static uint64_t snapshotCatchUpEntriesN = 1;
 
 // RaftNode:: is a class. 这三个变量从raft-kv的main()读进来. constructor for RaftNode class
 RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
@@ -393,14 +393,14 @@ void RaftNode::maybe_trigger_snapshot() {
  * 通过从 Redis 服务器获取快照，可以确保所有节点获取到的是一致的快照数据，
  * 避免因节点本地生成快照时的延迟导致的数据不一致问题。
  */
-  redis_server_->get_snapshot(std::move([&promise](const SnapshotDataPtr& data) {  // 接入rocksdb 则需要改成 get_checkpoint
+  redis_server_->get_snapshot(std::move([&promise](const SnapshotDataPtr& data) {  // 接入rocksdb 注意这里拿到的是kv pair的vector 序列化数据
     promise.set_value(data);
   }));
 
   future.wait(); // 等待快照数据的获取完成，并通过future.get()获取快照数据
   SnapshotDataPtr snapshot_data = future.get();
 
-  proto::SnapshotPtr snap; // 在内存中创建新的快照，根据现在的状态.查看一下是否有kv store。 Snapshot中的data是vector<uint_8>.应该可以直接存储
+  proto::SnapshotPtr snap; // 在内存中创建新的快照，根据现在的状态.查看一下是否有kv store。 Snapshot中的data是vector<uint_8>.rocksdb应该也可以直接存储
   Status status = storage_->create_snapshot(applied_index_, conf_state_, *snapshot_data, snap);
   if (!status.is_ok()) {
     LOG_FATAL("create snapshot error %s", status.to_string().c_str());

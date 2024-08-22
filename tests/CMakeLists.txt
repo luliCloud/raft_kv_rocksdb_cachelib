@@ -58,16 +58,11 @@ add_executable(test_wal test_wal.cpp)
 target_link_libraries(test_wal ${LIBS})
 gtest_add_tests(TARGET test_wal)
 
-# for gtest and test_resdis_store
-add_executable(test_kvstore_map test_kvstore_map.cpp)
+# for gtest and test_resdis_store_rocksdb
+add_executable(test_kvstore_rocksdb test_kvstore_rocksdb.cpp)
 # 将目标 test_kvstore_map 与库 LIBS 进行链接，确保它在编译时能找到并使用所需的库。
-target_link_libraries(test_kvstore_map ${LIBS}) 
+target_link_libraries(test_kvstore_rocksdb ${LIBS}) 
 # 从 test_raftlog 可执行文件中提取测试用例，并将其添加到 CMake 的测试框架中。
 # CMake 会自动查找使用 Google Test 
 # 框架编写的测试函数（例如 TEST() 宏定义的测试），并将这些测试用例注册到 ctest 测试工具中。
-gtest_add_tests(TARGET test_kvstore_map)
-
-# for gtest and test_resdis_store_rocksdb
-add_executable(test_kvstore_rocksdb test_kvstore_rocksdb.cpp)
-target_link_libraries(test_kvstore_rocksdb ${LIBS}) 
 gtest_add_tests(TARGET test_kvstore_rocksdb)

@@ -167,16 +167,29 @@ RedisStore::RedisStore(RaftNode* server, std::vector<uint8_t> snap, uint16_t por
     throw std::runtime_error("Failed to open RocksDB: " + st.ToString());
   }
 
+  // if (!snap.empty()) { // 如果传进来的snap不为空. for rocksdb we need to modify here !
+  //   std::unordered_map<std::string, std::string> kv;
+  //   msgpack::object_handle oh = msgpack::unpack((const char*) snap.data(), snap.size());
+
+  //   try {
+  //     oh.get().convert(kv);
+  //   } catch (std::exception& e) {
+  //     LOG_WARN("invalid snapshot: %s", e.what()); // for test
+  //   }
+  //   std::swap(kv, key_values_); // 用kv mp 值replace key_value_。snap代表最新的状态
+  // }
+
+  /** for rocksdb initialize if using passed snap */
   if (!snap.empty()) { // 如果传进来的snap不为空. for rocksdb we need to modify here !
-    std::unordered_map<std::string, std::string> kv;
+    std::vector<std::pair<std::string, std::string>> key_values;
     msgpack::object_handle oh = msgpack::unpack((const char*) snap.data(), snap.size());
 
     try {
-      oh.get().convert(kv);
+      oh.get().convert(key_values);
     } catch (std::exception& e) {
       LOG_WARN("invalid snapshot: %s", e.what()); // for test
     }
-    std::swap(kv, key_values_); // 用kv mp 值replace key_value_。snap代表最新的状态
+    load_kv_to_rocksdb(key_values);  // 注意这里我们已经load rocksdb::DB* db_了
   }
 
   auto address = boost::asio::ip::address::from_string("0.0.0.0"); // 这个地址对吗？
@@ -257,7 +270,7 @@ void RedisStore::del(std::vector<std::string> keys, const StatusCallback& callba
   RaftCommit commit;
   commit.node_id = static_cast<uint32_t>(server_->node_id());
   commit.commit_id = commit_id;
-  commit.redis_data.type = RedisCommitData::kCommitDel;
+  commit.redis_data.type = RedisCommitData::kCommitDel; // 这里indicate 了是del
   commit.redis_data.strs = std::move(keys);
   msgpack::sbuffer sbuf;
   msgpack::pack(sbuf, commit);
@@ -312,29 +325,43 @@ void RedisStore::get_all_key_value(std::vector<std::pair<std::string, std::strin
   }
 }
 
-/** 根据现在的key value map创建新的snapshot */
-void RedisStore::get_snapshot(const GetSnapshotCallback& callback) {
+// void RedisStore::get_snapshot(const GetSnapshotCallback& callback) {
+//   io_service_.post([this, callback] {
+//     msgpack::sbuffer sbuf;
+//     // for rocksdbm we use vector<>
+//     std::vector<std::pair<std::string, std::string>> key_values;
+//     msgpack::pack(sbuf, key_values_);
+//     // msgpack::pack(sbuf, key_values);  // modify here!
+//     /**
+//      * SnapshotDataPtr 是一个类型定义，表示一个 std::shared_ptr，指向 std::vector<uint8_t> 类型的对象。
+// std::vector<uint8_t> 是一个动态数组，专门用于存储字节数据（uint8_t 是表示 8 位无符号整数的类型，
+// 通常用于处理二进制数据）。
+// (sbuf.data(), sbuf.data() + sbuf.size())：这个构造函数接受两个指针，表示一个字节范围。
+// sbuf.data() 是起始指针，指向 sbuf 中数据的起始位置，
+// sbuf.data() + sbuf.size() 是结束指针，指向 sbuf 中数据的结束位置。
+//      */
+//     SnapshotDataPtr data(new std::vector<uint8_t>(sbuf.data(), sbuf.data() + sbuf.size()));
+//     callback(data);
+//   });
+// }
+
+/** 根据现在的key value map创建新的snapshot - rocksdb version. replace kv store with db_ */
+void RedisStore::get_snapshot(const GetSnapshotCallback& callback) { // raft_node 里回调了这个函数。获得了data的数据。但是不需要读取到任何新的kv store中。
+// 所以不需要修改
   io_service_.post([this, callback] {
     msgpack::sbuffer sbuf;
     // for rocksdbm we use vector<>
     std::vector<std::pair<std::string, std::string>> key_values;
-    msgpack::pack(sbuf, key_values_);
-    // msgpack::pack(sbuf, key_values);  // modify here!
-    /**
-     * SnapshotDataPtr 是一个类型定义，表示一个 std::shared_ptr，指向 std::vector<uint8_t> 类型的对象。
-std::vector<uint8_t> 是一个动态数组，专门用于存储字节数据（uint8_t 是表示 8 位无符号整数的类型，
-通常用于处理二进制数据）。
-(sbuf.data(), sbuf.data() + sbuf.size())：这个构造函数接受两个指针，表示一个字节范围。
-sbuf.data() 是起始指针，指向 sbuf 中数据的起始位置，
-sbuf.data() + sbuf.size() 是结束指针，指向 sbuf 中数据的结束位置。
-     */
+    get_all_key_value(key_values); // add here!
+    msgpack::pack(sbuf, key_values);
     SnapshotDataPtr data(new std::vector<uint8_t>(sbuf.data(), sbuf.data() + sbuf.size()));
-    callback(data);
+    callback(data); // 这个回调给哪里-RaftNode。cpp
   });
 }
 
 // using write_batch to read kv data from msgpack serialized data and merge into local database (include write, delete, udpate kv)
 void RedisStore::load_kv_to_rocksdb(const std::vector<std::pair<std::string, std::string>>& key_values) {
+
   // delete operation is not included in batch operation. we need to delete by ourselves
   std::vector<std::string> keys_to_delete;
   rocksdb::Iterator* it = db_->NewIterator(rocksdb::ReadOptions());
@@ -344,6 +371,7 @@ void RedisStore::load_kv_to_rocksdb(const std::vector<std::pair<std::string, std
     bool found = false;
     for (const auto& kv : key_values) {
       if (kv.first == key) {
+        
         found = true;  // found, not need to delete
         break;
       }
@@ -382,7 +410,42 @@ rocksdb::Status RedisStore::getKV(const rocksdb::ReadOptions& options, const std
   return status;
 }
 
-// 从snapshot中恢复KV的值，替换现有的kv store
+bool RedisStore::get(const std::string& key, std::string& value) {
+  // 使用Rocksdb 的ReadOptions
+  rocksdb::ReadOptions read_options;
+  rocksdb::Status status = db_->Get(read_options, rocksdb::Slice(key), &value);
+
+  if (status.ok()) {
+    return true;
+  } else if (status.IsNotFound()) {
+    return false;
+  } else {
+    LOG_ERROR("Error reading key %s: %s", key.c_str(), status.ToString().c_str());
+    return false;
+  }
+}
+
+
+// void RedisStore::recover_from_snapshot(SnapshotDataPtr snap, const StatusCallback& callback) {
+//   io_service_.post([this, snap, callback] {
+//     std::unordered_map<std::string, std::string> kv; // original kv map
+
+//     // std::vector<std::pair<std::string, std::string>> key_values;  // rocksdb kv pair
+//     msgpack::object_handle oh = msgpack::unpack((const char*) snap->data(), snap->size());
+//     try {
+//       oh.get().convert(kv);
+//     } catch (std::exception& e) {
+//       callback(Status::io_error("invalid snapshot"));
+//       return;
+//     }
+//     std::swap(kv, key_values_);
+//     /** rocksdb, read this into db, using WriteBatch */
+    
+//     callback(Status::ok());
+//   });
+// }
+
+// 从snapshot中恢复KV的值，替换现有的kv store. rocksdb version
 /**
  * constructor：初始化节点状态：当一个Raft节点启动时，它需要从持久化存储中恢复之前的状态，
  * 包括日志条目和快照数据。构造函数中从快照加载KV的操作，确保节点在启动时能够恢复到之前的状态。
@@ -391,35 +454,93 @@ rocksdb::Status RedisStore::getKV(const rocksdb::ReadOptions& options, const std
  */
 void RedisStore::recover_from_snapshot(SnapshotDataPtr snap, const StatusCallback& callback) {
   io_service_.post([this, snap, callback] {
-    std::unordered_map<std::string, std::string> kv; // original kv map
-
-    // std::vector<std::pair<std::string, std::string>> key_values;  // rocksdb kv pair
+    std::vector<std::pair<std::string, std::string>> key_values;  // rocksdb kv pair
     msgpack::object_handle oh = msgpack::unpack((const char*) snap->data(), snap->size());
     try {
-      oh.get().convert(kv);
+      oh.get().convert(key_values);
     } catch (std::exception& e) {
       callback(Status::io_error("invalid snapshot"));
       return;
     }
-    std::swap(kv, key_values_);
-    /** rocksdb, read this into db, using WriteBatch */
     
+    /** rocksdb, read this into db, using WriteBatch */
+    load_kv_to_rocksdb(key_values); // 将传过来的data读到db_里了
     callback(Status::ok());
   });
 }
+
+// void RedisStore::keys(const char* pattern, int len, std::vector<std::string>& keys) {
+//   for (auto it = key_values_.begin(); it != key_values_.end(); ++it) {
+//     if (string_match_len(pattern, len, it->first.c_str(), it->first.size(), 0)) {
+//       keys.push_back(it->first);
+//     }
+//   }
+// }
+
 // 找到所有符合pattern的key。从现在的KV store中找到pattern对应的所有key，并推到key list中（传入参数）
 void RedisStore::keys(const char* pattern, int len, std::vector<std::string>& keys) {
-  for (auto it = key_values_.begin(); it != key_values_.end(); ++it) {
-    if (string_match_len(pattern, len, it->first.c_str(), it->first.size(), 0)) {
-      keys.push_back(it->first);
+  rocksdb::ReadOptions read_options;
+  std::unique_ptr<rocksdb::Iterator> it(db_->NewIterator(read_options));
+
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    const std::string& key = it->key().ToString();
+    if (string_match_len(pattern, len, key.c_str(), key.size(), 0)) {
+      keys.push_back(key);
     }
+  }
+
+  if (!it->status().ok()) {
+    LOG_ERROR("Iterator erros: %s", it->status().ToString().c_str());
   }
 }
 
-/** 处理Raft提交的日志条目，更新kv store，并执行相应的回调函数 */
+// void RedisStore::read_commit(proto::EntryPtr entry) {
+//   // 定义一个lambda函数，负责处理Raft提交的日志条目。然后传给io_service_去post
+//   auto cb = [this, entry] {
+//     RaftCommit commit;
+//     try {
+//       msgpack::object_handle oh = msgpack::unpack((const char*) entry->data.data(), entry->data.size());
+//       oh.get().convert(commit);
+
+//     }
+//     catch (std::exception& e) {
+//       LOG_ERROR("bad entry %s", e.what());
+//       return;
+//     }
+//     RedisCommitData& data = commit.redis_data; // 获得data
+
+//     switch (data.type) {
+//       case RedisCommitData::kCommitSet: { // 更新kv数据
+//         assert(data.strs.size() == 2);
+//         this->key_values_[std::move(data.strs[0])] = std::move(data.strs[1]);
+//         break;
+//       }
+//       case RedisCommitData::kCommitDel: { // 删除key对应的数据
+//         for (const std::string& key : data.strs) {
+//           this->key_values_.erase(key);
+//         }
+//         break;
+//       }
+//       default: {
+//         LOG_ERROR("not supported type %d", data.type);
+//       }
+//     }
+
+//     if (commit.node_id == server_->node_id()) { // 如果commit 由自己发出，在自己的pending中删除该request
+//       auto it = pending_requests_.find(commit.commit_id);
+//       if (it != pending_requests_.end()) {
+//         it->second(Status::ok());
+//         pending_requests_.erase(it);
+//       }
+//     }
+//   };
+
+//   io_service_.post(std::move(cb));
+// }
+/** 处理Raft提交的日志条目，更新kv store，并执行相应的回调函数. 应该在这里处理key value 更新，插入，删除？ */
 void RedisStore::read_commit(proto::EntryPtr entry) {
   // 定义一个lambda函数，负责处理Raft提交的日志条目。然后传给io_service_去post
-  auto cb = [this, entry] {
+  auto cb = [this, entry] { // 这里是从entry里读到commit 里，data还在commit中。
     RaftCommit commit;
     try {
       msgpack::object_handle oh = msgpack::unpack((const char*) entry->data.data(), entry->data.size());
@@ -435,12 +556,19 @@ void RedisStore::read_commit(proto::EntryPtr entry) {
     switch (data.type) {
       case RedisCommitData::kCommitSet: { // 更新kv数据
         assert(data.strs.size() == 2);
-        this->key_values_[std::move(data.strs[0])] = std::move(data.strs[1]);
+       // 只用rocksdb 的put 更新或插入kv pair
+        rocksdb::Status status = db_->Put(rocksdb::WriteOptions(), data.strs[0], data.strs[1]);
+        if (!status.ok()) {
+            LOG_ERROR("Failed to set key-value: %s", status.ToString().c_str());
+        }
         break;
       }
       case RedisCommitData::kCommitDel: { // 删除key对应的数据
         for (const std::string& key : data.strs) {
-          this->key_values_.erase(key);
+          rocksdb::Status status = db_->Delete(rocksdb::WriteOptions(), key);
+          if (!status.ok()) {
+            LOG_ERROR("Failed to delete key: %s", status.ToString().c_str());
+          }
         }
         break;
       }

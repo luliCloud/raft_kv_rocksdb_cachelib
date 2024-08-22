@@ -68,16 +68,18 @@ class RedisStore {
   }
 /** 启动服务，并通过promise返回线程ID */
   void start(std::promise<pthread_t>& promise);
-/* 通过关键字查询值 */
-  bool get(const std::string& key, std::string& value) {
-    auto it = key_values_.find(key);
-    if (it != key_values_.end()) {
-      value = it->second;
-      return true;
-    } else {
-      return false;
-    }
-  }
+
+  // bool get(const std::string& key, std::string& value) {
+  //   auto it = key_values_.find(key);
+  //   if (it != key_values_.end()) {
+  //     value = it->second;
+  //     return true;
+  //   } else {
+  //     return false;
+  //   }
+  // }
+  /* 通过关键字查询值, 在rocksdb中cpp里重写 */
+  bool get(const std::string& key, std::string& value);
 /** 设置kv pair */
   void set(std::string key, std::string value, const StatusCallback& callback);
 /** 删除kv pair */

@@ -72,33 +72,81 @@ bring the node back up and verify it recovers with the updated value "new-value"
     "new-value"
 
 ### test for rocksdb
-
+To run all test after build, please run `ctest` in build dir. 
     
 ### benchmark
+please run `goreman start` in bash 1 
+Please run `redis-benchmark -t set,get -n 100000 -p 63791` in bash 2
 
-    redis-benchmark -t set,get -n 100000 -p 63791
+**Using rocksdb as kv store**, 99.95% is 20 folds faster than unordered_map as kv store. Throughput (set) requests 2.5 folds more than unordered_map kv store.  Completed 1000000 set request 2 folds faster han unordered_map kv store.
     
     ====== SET ======
-      100000 requests completed in 1.35 seconds （我的测试在17.5s左右，不知道原因）
-      50 parallel clients
-      3 bytes payload
-      keep alive: 1
-    
-    96.64% <= 1 milliseconds
-    99.15% <= 2 milliseconds
-    99.90% <= 3 milliseconds
-    100.00% <= 3 milliseconds
-    73909.83 requests per second
-    
-    ====== GET ======
-      100000 requests completed in 0.95 seconds
-      50 parallel clients
-      3 bytes payload
-      keep alive: 1
-    
-    99.95% <= 4 milliseconds
-    100.00% <= 4 milliseconds
-    105485.23 requests per second
+  100000 requests completed in 22.34 seconds
+  50 parallel clients
+  3 bytes payload
+  keep alive: 1
+  multi-thread: no
+
+99.96% <= 43 milliseconds
+99.97% <= 44 milliseconds
+99.99% <= 45 milliseconds
+99.99% <= 47 milliseconds
+99.99% <= 48 milliseconds
+99.99% <= 50 milliseconds
+99.99% <= 51 milliseconds
+100.00% <= 52 milliseconds
+100.00% <= 54 milliseconds
+100.00% <= 55 milliseconds
+100.00% <= 56 milliseconds
+100.00% <= 58 milliseconds
+100.00% <= 59 milliseconds
+4476.08 requests per second
+
+====== GET ======
+  100000 requests completed in 3.84 seconds
+  50 parallel clients
+  3 bytes payload
+  keep alive: 1
+  multi-thread: no
+
+0.02% <= 1 milliseconds
+99.35% <= 2 milliseconds
+100.00% <= 2 milliseconds
+26041.67 requests per second
+
+**using unordered map as kv store**
+
+====== SET ======
+  100000 requests completed in 55.53 seconds
+  50 parallel clients
+  3 bytes payload
+  keep alive: 1
+  multi-thread: no
+
+99.95% <= 1094 milliseconds
+99.98% <= 1097 milliseconds
+100.00% <= 1097 milliseconds
+1800.96 requests per second
+
+====== GET ======
+  100000 requests completed in 3.68 seconds
+  50 parallel clients
+  3 bytes payload
+  keep alive: 1
+  multi-thread: no
+
+99.99% <= 3 milliseconds
+99.99% <= 5 milliseconds
+99.99% <= 7 milliseconds
+99.99% <= 9 milliseconds
+99.99% <= 11 milliseconds
+100.00% <= 13 milliseconds
+100.00% <= 15 milliseconds
+100.00% <= 17 milliseconds
+100.00% <= 19 milliseconds
+100.00% <= 21 milliseconds
+100.00% <= 24 milliseconds
+27151.78 requests per second
     
     
     
