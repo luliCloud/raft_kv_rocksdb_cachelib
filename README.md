@@ -81,72 +81,54 @@ Please run `redis-benchmark -t set,get -n 100000 -p 63791` in bash 2
 **Using rocksdb as kv store**, 99.95% is 20 folds faster than unordered_map as kv store. Throughput (set) requests 2.5 folds more than unordered_map kv store.  Completed 1000000 set request 2 folds faster han unordered_map kv store.
     
     ====== SET ======
-  100000 requests completed in 22.34 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-  multi-thread: no
+        100000 requests completed in 22.34 seconds
+        50 parallel clients
+        3 bytes payload
+        keep alive: 1
+        multi-thread: no
 
-99.96% <= 43 milliseconds
-99.97% <= 44 milliseconds
-99.99% <= 45 milliseconds
-99.99% <= 47 milliseconds
-99.99% <= 48 milliseconds
-99.99% <= 50 milliseconds
-99.99% <= 51 milliseconds
-100.00% <= 52 milliseconds
-100.00% <= 54 milliseconds
-100.00% <= 55 milliseconds
-100.00% <= 56 milliseconds
-100.00% <= 58 milliseconds
-100.00% <= 59 milliseconds
-4476.08 requests per second
+    99.96% <= 43 milliseconds
+    99.97% <= 44 milliseconds
+    99.99% <= 45 milliseconds
+    100.00% <= 52 milliseconds
+    4476.08 requests per second
 
-====== GET ======
-  100000 requests completed in 3.84 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-  multi-thread: no
+    ====== GET ======
+        100000 requests completed in 3.84 seconds
+        50 parallel clients
+        3 bytes payload
+        keep alive: 1
+        multi-thread: no
 
-0.02% <= 1 milliseconds
-99.35% <= 2 milliseconds
-100.00% <= 2 milliseconds
-26041.67 requests per second
+    0.02% <= 1 milliseconds
+    99.35% <= 2 milliseconds
+    100.00% <= 2 milliseconds
+    26041.67 requests per second
 
 **using unordered map as kv store**
 
-====== SET ======
-  100000 requests completed in 55.53 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-  multi-thread: no
+    ====== SET ======
+        100000 requests completed in 55.53 seconds
+        50 parallel clients
+        3 bytes payload
+        keep alive: 1
+        multi-thread: no
 
-99.95% <= 1094 milliseconds
-99.98% <= 1097 milliseconds
-100.00% <= 1097 milliseconds
-1800.96 requests per second
+    99.95% <= 1094 milliseconds
+    99.98% <= 1097 milliseconds
+    100.00% <= 1097 milliseconds
+    1800.96 requests per second
 
-====== GET ======
-  100000 requests completed in 3.68 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-  multi-thread: no
+    ====== GET ======
+        100000 requests completed in 3.68 seconds
+        50 parallel clients
+        3 bytes payload
+        keep alive: 1
+        multi-thread: no
 
-99.99% <= 3 milliseconds
-99.99% <= 5 milliseconds
-99.99% <= 7 milliseconds
-99.99% <= 9 milliseconds
-99.99% <= 11 milliseconds
-100.00% <= 13 milliseconds
-100.00% <= 15 milliseconds
-100.00% <= 17 milliseconds
-100.00% <= 19 milliseconds
-100.00% <= 21 milliseconds
-100.00% <= 24 milliseconds
-27151.78 requests per second
+    99.99% <= 3 milliseconds
+    100.00% <= 13 milliseconds
+    27151.78 requests per second
     
     
     
