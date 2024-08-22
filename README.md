@@ -75,10 +75,13 @@ bring the node back up and verify it recovers with the updated value "new-value"
 To run all test after build, please run `ctest` in build dir. 
     
 ### benchmark
-please run `goreman start` in bash 1 
+Please run `goreman start` in bash 1
+
 Please run `redis-benchmark -t set,get -n 100000 -p 63791` in bash 2
 
-**Using rocksdb as kv store**, 99.95% is 20 folds faster than unordered_map as kv store. Throughput (set) requests 2.5 folds more than unordered_map kv store.  Completed 1000000 set request 2 folds faster han unordered_map kv store.
+**Using rocksdb as kv store** 
+
+The stress test for RocksDB as the kv store shows 4500 QPS for 4KB KV write and 26000 QPS for 5KB kv read. The P99 delay is less than 40 ms. Compared with unordered_map as the kv store, QPS for KV write is **2.5 folds higher** and P99 is **25 folds faster**.
     
     ====== SET ======
         100000 requests completed in 22.34 seconds
