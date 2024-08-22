@@ -352,6 +352,7 @@ void RedisStore::get_snapshot(const GetSnapshotCallback& callback) { // raft_nod
     msgpack::sbuffer sbuf;
     // for rocksdbm we use vector<>
     std::vector<std::pair<std::string, std::string>> key_values;
+    get_all_key_value(key_values); // add here!
     msgpack::pack(sbuf, key_values);
     SnapshotDataPtr data(new std::vector<uint8_t>(sbuf.data(), sbuf.data() + sbuf.size()));
     callback(data); // 这个回调给哪里-RaftNode。cpp
@@ -360,6 +361,7 @@ void RedisStore::get_snapshot(const GetSnapshotCallback& callback) { // raft_nod
 
 // using write_batch to read kv data from msgpack serialized data and merge into local database (include write, delete, udpate kv)
 void RedisStore::load_kv_to_rocksdb(const std::vector<std::pair<std::string, std::string>>& key_values) {
+
   // delete operation is not included in batch operation. we need to delete by ourselves
   std::vector<std::string> keys_to_delete;
   rocksdb::Iterator* it = db_->NewIterator(rocksdb::ReadOptions());
@@ -369,6 +371,7 @@ void RedisStore::load_kv_to_rocksdb(const std::vector<std::pair<std::string, std
     bool found = false;
     for (const auto& kv : key_values) {
       if (kv.first == key) {
+        
         found = true;  // found, not need to delete
         break;
       }

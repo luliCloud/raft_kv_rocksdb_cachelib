@@ -16,8 +16,8 @@ namespace kv {
 // 例如，在 32 位和 64 位系统上，uint64_t 始终是 64 位长的无符号整数​
 static uint64_t defaultSnapCount = 100000;
 static uint64_t snapshotCatchUpEntriesN = 100000;
-// static uint64_t defaultSnapCount = 3;
-// static uint64_t snapshotCatchUpEntriesN = 2;
+// static uint64_t defaultSnapCount = 2;
+// static uint64_t snapshotCatchUpEntriesN = 1;
 
 // RaftNode:: is a class. 这三个变量从raft-kv的main()读进来. constructor for RaftNode class
 RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
