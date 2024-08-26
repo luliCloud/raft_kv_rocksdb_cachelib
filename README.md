@@ -1,4 +1,12 @@
-# raft-kv
+# Raft-KV Product
+
+This product provides robust key-value storage tailored for distributed database systems, engineered to meet the demands of applications requiring **high availability**, **data consistency**, and exceptional **fault tolerance**, even in network partition scenarios. It’s an ideal solution for industries like **finance**, **e-commerce**, and **social media**.
+
+Our stress tests demonstrated impressive performance, with 4500 QPS for 4KB KV writes and 26000 QPS for 5KB KV reads, all while maintaining a P99 latency of less than 40 milliseconds. The performance across different size of QPS are shown below.
+
+The backend data storage leverages both HashMap and RocksDB: hashmap excels at handling increased random inquiries, while RocksDB, a mature and optimized business solution, is ideal for persistent data storage. Compared to using HashMap as the KV store, RocksDB delivers 2.5 times higher write QPS and an astonishing 25 times faster P99 latency.
+
+
 
 ## Getting Started
 
