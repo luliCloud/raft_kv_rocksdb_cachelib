@@ -10,69 +10,78 @@ The backend data storage leverages both HashMap and RocksDB: hashmap excels at h
 
 ## Getting Started
 
-### Build (in root dir /raft_cpp) (modified CMakeLists.txt file)
+### Build
+To build the project, follow these steps in the root directory `/raft_cpp`:
+
     mkdir -p build
     cd build
     cmake .. -DCMAKE_BUILD_TYPE=Release 
-    // if we want to run tests file uisng GDB, cmake .. -DCMAKE_BUILD_TYPE=Debug
     make -j8
     
+Note: If you want to run test files using GDB, use the following command:
+
+    cmake .. -DCMAKE_BUILD_TYPE=Debug
+
+
 ### Running a cluster
+**Important**: Ensure that `goreman` and `redis` are run inside the `build` directory.
 
-### Lu: Noting must run goreman and redis inside of build dir
-
+1. **Install Goreman**\
 First install [goreman](https://github.com/mattn/goreman), which manages Procfile-based applications.
-### Lu: may need set port in CLI
+2. **Set RPC Port (Mandatory for IPC)**\
+If you need to set a specific port in the CLI, run in both bashes:
+
+    ```
     export GRREMAN_RPC_PORT=8555
-### then start with assigned port
+3. **Start Goreman**\
+start the cluster with the assigned port:
+    ```
     goreman start
+4. **Exit Goreman**\
+Use `ctrl + c` to exit `goreman` before proceeding with Redis installation.
     
-Lu: using ctrl + C to exit goreman for the following installing (Redis)
-    
-### Test
-
-install [redis-cli](https://github.com/antirez/redis), a redis console client.
-
-[Lu:
-### install redis and redis-cli
-    sudo apt update (Ubuntu)
+### Install Redis
+1. **Install Redis and Redis-CLI**\
+install [redis-cli](https://github.com/antirez/redis), a redis console client. To install Redis and the Redis CLI:
+    ```
+    sudo apt update #(for Ubuntu)
     sudo apt install reids-server
-
-### running redis and check status
+2. **Start Redis and check status**
+    ```
     sudo systemctl start redis
     sudo systemctl status redis
 
-### check the port num: generally the port of Redis is 6379, not 63791. but we set the specific port number in Procfile
-    sudo grep "port" /etc/redis/redis.conf
-]
-
-### run goreman in bash1. and open a new bash run this (remember to set same port in bash2)
-    export GOREMAN_RPC_PORT=8555 // in both bashes. otherwise refuse connection via RPC
-
-    redis-cli -p 63791  // enter command after 127.0.0.1:6379
+### Running Tests
+**Run Goreman in Bash**\
+1. Open a terminal (bash1) and run:
+    ``` 
+    export GOREMAN_RPC_PORT=8555
+    goreman start
+2. Open a new terminal (bash2) and run the following (remember to set the same port in both bash sessions):
+    ```
+    export GOREMAN_RPC_PORT=8555
+    redis-cli -p 63791
+3. Example commands to test:
+    ```
     127.0.0.1:63791> set mykey myvalue
     OK
     127.0.0.1:63791> get mykey
     "myvalue"
 
-### also for two bashes
-remove a node and replace the myvalue with "new-value" to check cluster availability:
-    Noting: keep bash1 goreman running all the time (don't ctrl + c to terminate the running goreman)
-    goreman start  // in bash1. bash1 is for monitoring status change of redis cache
-
-    goreman run stop node2  // in bash2
-    // remove node2. you will see non-stoptable message indicating node1 and node3 cannot connet (error connection refused), indicating they lost connection with node2
-
-    redis-cli -p 63791  // in bash2
-    // we set value of node1 here. if node2 come back later, should see this update value
-
+**Test Cluster Availability**
+1. In bash1, keep goreman running (do not terminate it with ctrl + C).
+2. In bash2, stop node2:
+    ```
+    goreman run stop node2
+3. You should see error messages indicating that node1 and node3 cannot connect with node2 (Msg: `connect refused`), as they lost connection with node2.
+4. Set a new value in node1 when node2 exits the cluster (mimic node failure and network partitions):
+    ```
+    redis-cli -p 63791
     127.0.0.1:63791> set mykey new-value
     OK
-    
-bring the node back up and verify it recovers with the updated value "new-value":
-### bring node2 back first (in bash2)
+5. Bring node2 back up and verify it recovers with the updated value:
+    ```
     goreman run restart node2
-
     redis-cli -p 63792
     127.0.0.1:63792> KEYS *
     1) "mykey"
@@ -80,17 +89,31 @@ bring the node back up and verify it recovers with the updated value "new-value"
     "new-value"
 
 ### test for rocksdb
-To run all test after build, please run `ctest` in build dir. 
-    
-### benchmark
-Please run `goreman start` in bash 1
+To run all tests after building the project, navigate to the build directory and execute: 
+    ```
+    ctest```
+To run specific test files, navigate to the `/build/tests` directories and run `./testfile` (if the testfile named as this).
 
-Please run `redis-benchmark -t set,get -n 100000 -p 63791` in bash 2
+### Benchmarking
+1. **Start Goreman In bash1**:
+    ```
+    goreman start
+2. **Run Redis Benchmark in bash2**:
+    ```
+    redis-benchmark -t set,get -n 100000 -p 63791
+### Performance with RocksDB as the KV Store
+The stress test for RocksDB as the key-value store shows:
+1. 4500 QPS for 4KB KV writes.
+2. 26000 QPS for 5KB KV reads.
+3. P99 latency is less than 40 ms.
 
-**Using rocksdb as kv store** 
+Compared to using unordered_map as the KV store, RocksDB provides:
+1. 2.5 times higher QPS for KV writes.
+2. 25 times faster P99 latency.\
+**Using RocksDB as kv store**
 
-The stress test for RocksDB as the kv store shows 4500 QPS for 4KB KV write and 26000 QPS for 5KB kv read. The P99 delay is less than 40 ms. Compared with unordered_map as the kv store, QPS for KV write is **2.5 folds higher** and P99 is **25 folds faster**.
-    
+**using unordered map as kv store**
+
     ====== SET ======
         100000 requests completed in 22.34 seconds
         50 parallel clients
