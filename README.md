@@ -88,7 +88,7 @@ install [redis-cli](https://github.com/antirez/redis), a redis console client. T
     127.0.0.1:63792> get mykey
     "new-value"
 
-### test for rocksdb
+### Test for rocksdb
 To run all tests after building the project, navigate to the build directory and execute: 
     ```
     ctest```
@@ -112,7 +112,7 @@ Compared to using unordered_map as the KV store, RocksDB provides:
 2. 25 times faster P99 latency.\
 **Using RocksDB as kv store**
 
-**using unordered map as kv store**
+**Use unordered map as kv store**
 
     ====== SET ======
         100000 requests completed in 22.34 seconds
@@ -139,7 +139,7 @@ Compared to using unordered_map as the KV store, RocksDB provides:
     100.00% <= 2 milliseconds
     26041.67 requests per second
 
-**using unordered map as kv store**
+**Use unordered map as kv store**
 
     ====== SET ======
         100000 requests completed in 55.53 seconds
