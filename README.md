@@ -110,9 +110,8 @@ The stress test for RocksDB as the key-value store shows:
 Compared to using unordered_map as the KV store, RocksDB provides:
 1. 2.5 times higher QPS for KV writes.
 2. 25 times faster P99 latency.\
-**Using RocksDB as kv store**
 
-**Use unordered map as kv store**
+**Use RocksDB map as kv store**
 
     ====== SET ======
         100000 requests completed in 22.34 seconds
