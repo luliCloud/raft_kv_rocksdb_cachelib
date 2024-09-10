@@ -41,9 +41,9 @@ class TransportImpl : public Transport {
       return;
     }
 
-    PeerPtr p = Peer::creat(id, peer, (void*) &io_service_);
-    p->start();
-    peers_[id] = p;
+    PeerPtr p = Peer::creat(id, peer, (void*) &io_service_);  // 开始其他peer node和host的连接
+    p->start();  // 开始定时器
+    peers_[id] = p;  // 加入host node的peers map
   }
 
   void remove_peer(uint64_t id) final {
