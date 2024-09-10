@@ -15,7 +15,7 @@ class ClientSession {
   ~ClientSession() {
 
   }
-
+/** 这个 send 函数的主要目的是将数据打包并放入一个缓冲区中（buffer_），并且在合适的条件下启动数据的发送操作。 */
   void send(uint8_t transport_type, const uint8_t* data, uint32_t len) {
     uint32_t remaining = buffer_.readable_bytes();
 
@@ -33,23 +33,25 @@ class ClientSession {
   }
 
   void close_session();
-
+/** 这个 start_connect 函数的作用是启动一个异步的连接过程，尝试与指定的远程端点建立 TCP 连接 (host node)。
+ * 函数的设计使用了 Boost.Asio 提供的异步 I/O 操作，并且在连接成功或失败时执行相应的处理逻辑。 */
   void start_connect() {
     socket_.async_connect(endpoint_, [this](const boost::system::error_code& err) {
       if (err) {
-        LOG_DEBUG("connect [%lu] error %s", this->peer_id_, err.message().c_str());
+        LOG_DEBUG("connect [%lu] error %s in ClientSession::start_connect()", this->peer_id_, err.message().c_str());
         this->close_session();
         return;
       }
       this->connected_ = true;
-      LOG_INFO("connected to [%lu]", this->peer_id_);
+      LOG_INFO("connected to [%lu] in ClientSession::start_connect()", this->peer_id_);
 
       if (this->buffer_.readable()) {
         this->start_write();
       }
     });
   }
-
+/** 这个 start_write 函数用于处理异步写操作，将缓冲区中的数据发送到已建立的网络连接中（通过 socket_）。
+ * 它的工作原理是检查缓冲区中是否有待发送的数据，如果有，则启动异步写操作，并在写操作完成后继续处理剩余的数据。 */
   void start_write() {
     if (!buffer_.readable()) {
       return;
@@ -80,6 +82,9 @@ class ClientSession {
 
 class PeerImpl : public Peer {
  public:
+ /** 在transport::start()中我们实现了host node作为tcp连接的acceptor一方，要根据addr和port实现一个endpoint，
+  * 并且start，set，bind和accept这个端口接受的消息。而作为peers，我们只需要连接上这个endpoint就可以了。也就是这里的PeerImp
+  */
   explicit PeerImpl(boost::asio::io_service& io_service, uint64_t peer, const std::string& peer_str)
       : peer_(peer),
         io_service_(io_service),
@@ -127,6 +132,7 @@ class PeerImpl : public Peer {
   }
 
  private:
+ /** 函数的主要作用是发送数据，通过管理与服务器的连接会话（session_），确保数据被正确发送。 */
   void do_send_data(uint8_t type, const uint8_t* data, uint32_t len) {
     if (!session_) {
       session_ = std::make_shared<ClientSession>(io_service_, this);
@@ -136,22 +142,23 @@ class PeerImpl : public Peer {
       session_->send(type, data, len);
     }
   }
-
+/** 这个函数 start_timer 主要实现了一个定时器（timer）的异步循环调用，并且在每次定时器到期时，
+ * 发送调试数据（DebugMessage）到某个目标。 */
   void start_timer() {
-    timer_.expires_from_now(boost::posix_time::seconds(3));
+    timer_.expires_from_now(boost::posix_time::seconds(3));  //定时器到期时间为3秒
     timer_.async_wait([this](const boost::system::error_code& err) {
       if (err) {
         LOG_ERROR("timer waiter error %s", err.message().c_str());
         return;
       }
-      this->start_timer();
+      this->start_timer();  // 如果在这个循环中没有错误发生，就会在3秒后调用下一个定时器，形成定时循环机制。
     });
 
-    static std::atomic<uint32_t> tick;
+    static std::atomic<uint32_t> tick; // 每次定时器触发，这个计数器都会自增
     DebugMessage dbg;
     dbg.a = tick++;
     dbg.b = tick++;
-    do_send_data(TransportTypeDebug, (const uint8_t*) &dbg, sizeof(dbg));
+    do_send_data(TransportTypeDebug, (const uint8_t*) &dbg, sizeof(dbg)); // 传送调试信息
   }
 
   uint64_t peer_;

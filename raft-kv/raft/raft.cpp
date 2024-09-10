@@ -1231,6 +1231,13 @@ bool Raft::restore(const proto::Snapshot& s) {
 
 void Raft::tick() {
   if (tick_) {
+    /** tick_() 是一个函数调用，意味着 tick_ 是一个可调用对象
+     * （例如函数指针、std::function 对象或一个具有 operator() 的类对象）。调用 tick_() 会执行 tick_ 所指向的函数
+     * tick_ 在raft node初始化的时候一定是assign成follower.但是在后续的raft中，可能会更改成leader，candidate，从而
+     * 发生不一样的行为。
+     * tick_ 是一个函数对象，通常用 std::function<void()> 来表示。这意味着 tick_ 可以存储一个不带参数且无返回值的函数或 lambda 表达式。
+tick_() 的调用相当于执行 tick_ 绑定的具体函数。这个函数可能是心跳超时处理函数、
+选举超时处理函数或者领导者心跳发送函数。 */
     tick_();
   } else {
     LOG_WARN("tick function is not set");
@@ -1524,30 +1531,32 @@ bool Raft::append_entry(const std::vector<proto::Entry>& entries) {
   maybe_commit();
   return true;
 }
-
+/** Raft::tick_election() 是 Raft 协议中用于处理选举超时的函数。
+ * 这个函数在 Raft 节点的 Candidate 或 Follower 状态中定期调用，用于检查是否应该启动新一轮的选举。 */
 void Raft::tick_election() {
-  election_elapsed_++;
+  election_elapsed_++;  // tick_election()函数每次调用都会增加，跟踪自上次以来经过的时间。
+  // tick是每100ms出发的，所以这样记次数就是 elec_ela * 100 ms 即经过的时间。
 // 如果可以成为leader且 past election timeout（elapse已经大于randomized的time out），开始选举
-  if (promotable() && past_election_timeout()) { 
-    election_elapsed_ = 0;
+  if (promotable() && past_election_timeout()) { // promotable：是否可以成为领导，pastXX检查elect——ela是否已经超过阈值时间
+    election_elapsed_ = 0; 
     proto::MessagePtr msg(new proto::Message());
     msg->from = id_;
-    msg->type = proto::MsgHup;
+    msg->type = proto::MsgHup;  // 这个节点决定开始新一轮的选举。自己准备成为leader。promotable是可以成为leader，而不是pre？
     step(std::move(msg));
   }
 }
 
 void Raft::tick_heartbeat() {
-  heartbeat_elapsed_++;
-  election_elapsed_++;
+  heartbeat_elapsed_++;  // 这是一个计时器，用于记录自上次发送心跳消息以来经过的时间
+  election_elapsed_++;  // 这是另一个计时器，用于记录自上次选举超时检查以来经过的时间。它通常在所有状态下都递增，
 
-  if (election_elapsed_ >= election_timeout_) {
+  if (election_elapsed_ >= election_timeout_) { // 如果前者大于后者，选举超时。需要重新选举
     election_elapsed_ = 0;
-    if (check_quorum_) {
+    if (check_quorum_) {  // 选举仲裁。发送MsgCheck Quorum消息，特殊的消息。用于确认当前leader是否仍然有多数支持
       proto::MessagePtr msg(new proto::Message());
       msg->from = id_;
       msg->type = proto::MsgCheckQuorum;
-      step(std::move(msg));
+      step(std::move(msg));  // 消息通过step函数发送到raft算法的处理逻辑中。
     }
     // If current leader cannot transfer leadership in electionTimeout, it becomes leader again.
     if (state_ == RaftState::Leader && lead_transferee_ != 0) {
@@ -1555,12 +1564,12 @@ void Raft::tick_heartbeat() {
     }
   }
 
-  if (state_ != RaftState::Leader) {
+  if (state_ != RaftState::Leader) {  // 如果当前节点不是leader，那么不执行后续heartbeat逻辑
     return;
   }
 // elapsed是一个计时器变量，用于记录自上次发送心跳消息以来经过的时间。当elapsed超过timeout时
 // 领导者需要发送一个新的心跳消息，并将elapsed其重置为0
-  if (heartbeat_elapsed_ >= heartbeat_timeout_) { // 开始发送心跳
+  if (heartbeat_elapsed_ >= heartbeat_timeout_) { // 心跳超时，发送新的心跳。
     heartbeat_elapsed_ = 0;
     proto::MessagePtr msg(new proto::Message());
     msg->from = id_;

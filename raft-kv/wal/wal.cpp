@@ -178,6 +178,7 @@ void WAL::create(const std::string& dir) {
  * 以确保日志文件的有效性和正确顺序。ptr指向一个WAL。dir是WAL日志文件所在的目录。snap是日志的起始快照
  */
 WAL_ptr WAL::open(const std::string& dir, const WAL_Snapshot& snap) {
+  LOG_INFO("loading WAL at term %lu and index %lu in WALL::open()", snap.term, snap.index);  // lu: debug
   WAL_ptr w(new WAL(dir)); // 创建一个新的WAL，并让WAL ptr指向它。WAL管理一个dir的WAL文件。而不是指single WAL
 
   std::vector<std::string> names;

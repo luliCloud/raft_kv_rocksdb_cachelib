@@ -34,7 +34,7 @@ static std::unordered_map<std::string, CommandCallback> command_table = {
 };
 
 }
-
+/** 建立会显示在Redis CLI UI的信息 */
 static void build_redis_string_array_reply(const std::vector<std::string>& strs, std::string& reply) {
   //*2\r\n$4\r\nkey1\r\n$4key2\r\n
 
@@ -60,13 +60,20 @@ RedisSession::RedisSession(RedisStore* server, boost::asio::io_service& io_servi
       read_buffer_(RECEIVE_BUFFER_SIZE),
       reader_(redisReaderCreate()) {
 }
-
+/** 启动会话并开始监听来自客户端的消息。RedisStore的调用RedisSession从这里开始
+ * 异步操作流程：
+程序调用 async_read_some() 函数来非阻塞地从 socket_ 中读取数据。这个操作是异步的，因此程序不会等待数据读取完成，而是继续执行其他代码。
+一旦有数据可读或者出现错误，handler 回调函数就会被触发。
+在 handler 中，读取到的数据会被处理（调用 handle_read()），如果有错误发生，程序会记录错误日志。
+ */
 void RedisSession::start() {
   if (quit_) {
     return;
   }
-  auto self = shared_from_this();
-  auto buffer = boost::asio::buffer(read_buffer_.data(), read_buffer_.size());
+  auto self = shared_from_this(); // 创建一个只想当前对象的sharedptr。异步操作延迟执行，shared-ptr保证该对象在异步操作完成前不会被销毁
+  // 存储从客户端读取的数据。这个buffer被传递给async-read-some。表示client端读到的数据会存储到read-buffer-中
+  auto buffer = boost::asio::buffer(read_buffer_.data(), read_buffer_.size()); 
+  // 异步操作读取。当异步读取完成后，handler会被执行。也就是lambda函数的最后，如果读取成功，那么会执行handle-read这个函数。
   auto handler = [self](const boost::system::error_code& error, size_t bytes) {
     if (bytes == 0) {
       return;
@@ -81,21 +88,25 @@ void RedisSession::start() {
   };
   socket_.async_read_some(buffer, std::move(handler));
 }
-
-void RedisSession::handle_read(size_t bytes) {
+/** Redis 客户端接收到的数据的函数。它的任务是解析接收到的 Redis 命令数据，处理协议，生成命令回复，并继续启动下一次读取。 */
+void RedisSession::handle_read(size_t bytes) { // byte是从客户端读取到的数据。start，end是指向缓冲区的起始和结束。
   uint8_t* start = read_buffer_.data();
   uint8_t* end = read_buffer_.data() + bytes;
   int err = REDIS_OK;
   std::vector<struct redisReply*> replies;
-
-  while (!quit_ && start < end) {
+  // 循环遍历客户端发送的每个完整的命令行，逐步解析数据。
+  while (!quit_ && start < end) { 
+    /** 使用 memchr() 函数查找 start 到 start + bytes 区间中的第一个换行符 \n。
+     * Redis 协议的命令行通常以 \r\n 结尾，所以找到 \n 表示找到了一条完整的 Redis 命令行。 */
     uint8_t* p = (uint8_t*) memchr(start, '\n', bytes);
+    /* 如果 p 为 nullptr（即没有找到 \n），那么调用 this->start() 重新开始异步读取，等待更多数据到来，然后退出当前的解析循环。*/
     if (!p) {
       this->start();
       break;
     }
 
     size_t n = p + 1 - start;
+    // 处理完整行。将这行数据（从 start 到 p）传给 Redis 协议解析器 redisReader，进行协议解析。reader- 就是RedisReader
     err = redisReaderFeed(reader_, (const char*) start, n);
     if (err != REDIS_OK) {
       LOG_DEBUG("redis protocol error %d, %s", err, reader_->errstr);
@@ -104,6 +115,7 @@ void RedisSession::handle_read(size_t bytes) {
     }
 
     struct redisReply* reply = NULL;
+    /** 从 redisReader 中获取解析后的命令回复。如果解析成功，reply 会指向一个 redisReply 结构，它表示一个完整的 Redis 命令或命令组的回复。 */
     err = redisReaderGetReply(reader_, (void**) &reply);
     if (err != REDIS_OK) {
       LOG_DEBUG("redis protocol error %d, %s", err, reader_->errstr);
@@ -114,21 +126,25 @@ void RedisSession::handle_read(size_t bytes) {
       replies.push_back(reply);
     }
 
-    start += n;
+    start += n; // 注意n只是这一行命令的终止。buffer中可能还有下一行命令。所以n不是end
     bytes -= n;
-  }
+  } // while 循环在这里结束。buffer中所有命令解析完成。
+  // 如果解析成功且没有错误。将所有reply放入 replies中。然后for循环完成后，调用新的异步操作，等待下一个命令。
   if (err == REDIS_OK) {
     for (struct redisReply* reply : replies) {
       on_redis_reply(reply);
     }
     this->start();
   }
-
+/** 所有 redisReply 对象在使用完之后都必须被释放。freeReplyObject() 是 hiredis 提供的函数，
+ * 用于释放 redisReply 结构体所占用的内存，防止内存泄漏。 */
   for (struct redisReply* reply : replies) {
     freeReplyObject(reply);
   }
 }
-
+/** 负责解析从 Redis 客户端接收到的命令并调用对应处理函数的核心函数。
+ * 它的作用是检查并验证从客户端发来的 Redis 命令的格式和内容，
+ * 然后根据命令名称在命令表中找到相应的回调函数，并执行该回调函数来处理具体的命令。 */
 void RedisSession::on_redis_reply(struct redisReply* reply) {
   char buffer[256];
   if (reply->type != REDIS_REPLY_ARRAY) {
@@ -157,7 +173,7 @@ void RedisSession::on_redis_reply(struct redisReply* reply) {
     send_reply(buffer, n);
     return;
   }
-  shared::CommandCallback& cb = it->second;
+  shared::CommandCallback& cb = it->second; // mp中存储了这个command对应的具体函数实现的名字。因此用这个callback就可以异步调用具体的函数实现
   cb(shared_from_this(), reply);
 }
 
@@ -224,7 +240,9 @@ void RedisSession::get_command(std::shared_ptr<RedisSession> self, struct redisR
     g_free(str);
   }
 }
-
+/** set 就直接调用 server的set功能了。注意在RedisStore中set功能并不是直接set，而是将需要udpate的kv放入msg中，然后交给cluster进行raft 共识
+ * 如果raft通过。才调用readcommit中相应的case来处理这个标记为set的commit
+ */
 void RedisSession::set_command(std::shared_ptr<RedisSession> self, struct redisReply* reply) {
   assert(reply->type = REDIS_REPLY_ARRAY);
   assert(reply->elements > 0);
