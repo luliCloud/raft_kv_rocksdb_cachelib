@@ -1342,6 +1342,7 @@ bool Raft::maybe_send_append(uint64_t to, bool send_if_empty) {
   uint64_t term = 0;
   Status status_term = raft_log_->term(pr->next - 1, term); // 获得to Node的进度中next索引的日志的任期
   std::vector<proto::EntryPtr> entries; // 获得从next索引开始的log，最多max msg size条
+  // 这里是update restart node 的核心函数。从raft——log获得从restart node的最后log开始的下一条的所有log，并加进entries
   Status status_entries = raft_log_->entries(pr->next, max_msg_size_, entries);
   if (entries.empty() && !send_if_empty) {  // 如果没有日志条目需要发送且不强制发送空消息
     return false;
@@ -1374,7 +1375,7 @@ bool Raft::maybe_send_append(uint64_t to, bool send_if_empty) {
     msg->type = proto::MsgApp;
     msg->index = pr->next - 1;
     msg->log_term = term;
-    for (proto::EntryPtr& entry: entries) {
+    for (proto::EntryPtr& entry: entries) { // 在这里将entries中的所有日志加到msg->entries 中。这个msg之后就会发给从节点，要求其同步日志。
       //copy
       msg->entries.emplace_back(*entry);
     }
