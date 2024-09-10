@@ -17,7 +17,7 @@ namespace kv {
 static uint64_t defaultSnapCount = 100000;
 static uint64_t snapshotCatchUpEntriesN = 100000;
 // static uint64_t defaultSnapCount = 2;
-// static uint64_t snapshotCatchUpEntriesN = 1;
+// static uint64_t snapshotCatchUpEntriesN = 2;
 
 // RaftNode:: is a class. 这三个变量从raft-kv的main()读进来. constructor for RaftNode class
 RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
@@ -41,24 +41,7 @@ RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
 
   std::string work_dir = "node_" + std::to_string(id);
   snap_dir_ = work_dir + "/snap";
-  wal_dir_ = work_dir + "/wal";
-
-  // /** Rocksdb: create rocksdb db based on node id, noting word_dir already node specific */
-  // rocksdb_dir_ = work_dir + "/db";
-  // rocksdb::Options options;
-  // options.create_if_missing = true;
-  // /** create this path not exist */
-  // if (!boost::filesystem::exists(rocksdb_dir_)) {
-  //   boost::filesystem::create_directories(rocksdb_dir_);
-  // }
-  // // /** to find the db location */
-  // // boost::filesystem::path abs_work_dir = boost::filesystem::absolute(rocksdb_dir_);
-  // // LOG_INFO("Absolute path: %s", abs_work_dir.c_str());
-
-  // rocksdb::Status st = rocksdb::DB::Open(options, rocksdb_dir_, &db_);
-  // if (!st.ok()) {
-  //   throw std::runtime_error("Failed to open RocksDB: " + st.ToString());
-  // }
+  // wal_dir_ = work_dir + "/wal";  // lu edit Aug 26
 
   if (!boost::filesystem::exists(snap_dir_)) {
     boost::filesystem::create_directories(snap_dir_);
@@ -66,9 +49,9 @@ RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
 
   snapshotter_.reset(new Snapshotter(snap_dir_));
 
-  bool wal_exists = boost::filesystem::exists(wal_dir_);
-
-  replay_WAL();
+  bool wal_exists = boost::filesystem::exists(wal_dir_); // debug 
+  wal_dir_ = work_dir + "/wal";  // lu edit Aug 26. should put here
+  replay_WAL(); // in open_wal will create wal_dir_ if not exist
 
   Config c;
   c.id = id;
@@ -90,8 +73,13 @@ RaftNode::RaftNode(uint64_t id, const std::string& cluster, uint16_t port)
   if (!status.is_ok()) {
     LOG_FATAL("invalid configure %s", status.to_string().c_str());
   }
-
-  if (wal_exists) {
+/** node_.reset(Node::restart_node(c)) 中的 reset 是 std::unique_ptr 类的一个成员函数，
+ * 用于重新设置 unique_ptr 所管理的对象。所以reset不是Node中的函数，而是unique-ptr中的函数。
+std::unique_ptr::reset 的作用：
+reset 函数用于将 unique_ptr 指向一个新的对象，同时释放当前所指向的对象（如果有的话）。
+当 reset 被调用时，unique_ptr 会销毁当前持有的对象（调用其析构函数），并将其替换为新的对象。 */
+// 这里存在一点问题，就是wal_dir 在之前已经创建好了。所以无论如何都是进入这个if的。else不会进入。同时raft.cpp也没有
+  if (wal_exists) { // wal_dir exist. 则进入restart-node状态
     node_.reset(Node::restart_node(c));
   } else {
     std::vector<PeerContext> peers;
@@ -138,6 +126,9 @@ void RaftNode::start_timer() {
   });
 }
 
+/** 它用于从 Raft 节点获取已经准备好的事件，并将这些事件应用到系统的不同部分。
+ * 这包括将日志条目保存到 WAL（Write-Ahead Log）、
+ * 应用快照、发送消息、提交日志条目等操作。这个函数确保了 Raft 节点的状态保持一致，并且所有操作都被正确处理。 */
 void RaftNode::pull_ready_events() {
   assert(pthread_id_ == pthread_self()); // 确保当前线程是预期的thread
   while (node_->has_ready()) { // 当node有准备好的事件，循环处理
@@ -158,18 +149,18 @@ void RaftNode::pull_ready_events() {
       publish_snapshot(rd->snapshot); // 发布快照：将快照发布给其他节点。
     }
 
-    if (!rd->entries.empty()) { // 如果有新的日志it啊哦亩，追加到存储
+    if (!rd->entries.empty()) { // 如果有新的日志，追加到缓存 storage
       storage_->append(rd->entries);
     }
-    if (!rd->messages.empty()) { // 如果有新的消息，调用transport发送消息
+    if (!rd->messages.empty()) { // 如果有新的消息，调用transport发送消息.异步发送消息给同伴。
       transport_->send(rd->messages);
     }
 
     if (!rd->committed_entries.empty()) { // 如果有提交的日志，将这些条目转换为可应用的条目，并发布这些条目
       std::vector<proto::EntryPtr> ents;
-      entries_to_apply(rd->committed_entries, ents);
+      entries_to_apply(rd->committed_entries, ents); // 只是筛选出不重复的entry 插入到ents中。跟WAL无关
       if (!ents.empty()) {
-        publish_entries(ents);
+        publish_entries(ents);  // 这里就是真的应用ents中的data，比如update kv，成员配置编程，成员加入退出等
       }
     }
     maybe_trigger_snapshot(); // 调用该方法检查是否出要触发新的快照
@@ -246,7 +237,7 @@ void RaftNode::open_WAL(const proto::Snapshot& snap) {
   WAL_Snapshot walsnap;
   walsnap.index = snap.metadata.index;
   walsnap.term = snap.metadata.term;
-  LOG_INFO("loading WAL at term %lu and index %lu", walsnap.term, walsnap.index);
+  LOG_INFO("loading WAL at term %lu and index %lu in RaftNode::open_WAL", walsnap.term, walsnap.index);
 
   wal_ = WAL::open(wal_dir_, walsnap);
 }
@@ -259,11 +250,12 @@ void RaftNode::replay_WAL() {
   Status status = snapshotter_->load(snapshot);
   if (!status.is_ok()) { 
     if (status.is_not_found()) {
-      LOG_INFO("snapshot not found for node %lu", id_);
+      LOG_INFO("snapshot not found for node %lu in RaftNode::replay_WAL()", id_); // Lu: debug log
     } else {
-      LOG_FATAL("error loading snapshot %s", status.to_string().c_str());
+      LOG_FATAL("error loading snapshot %s in RaftNode::replay_WAL()", status.to_string().c_str());
     }
   } else {
+    LOG_INFO("snapshot found for node %lu in RaftNode::replay_WAL()", id_); // Lu: debug log
     storage_->apply_snapshot(snapshot); // 将snapshot的状态加载到memory中。作为日志状态的初始化
   }
 // 注意这个函数之后wal_变量已经变为从该snapshot开始的状态了
@@ -288,11 +280,15 @@ void RaftNode::replay_WAL() {
   } else {
     snap_data_ = std::move(snapshot.data);
   }
+  // if (!ents.empty()) {
+  //   last_index_ = ents.back()->index;
+  // }
+  // snap_data_ = std::move(snapshot.data);  // 这个逻辑行不通，会出错。
 }
 
 /** 该函数用于处理并应用一系列的日志条目，这些entries可能是普通或者配置更改条目。
  * 它通过迭代每个entry，根据其类型进行不同的处理，并在处理完成后更新已应用的日志索引？
- * 问题：交给Redis-server处理的那部分是什么？更新数据库吗？
+ * 问题：交给Redis-server处理的那部分是什么？更新数据库吗？是的。更新rocksdb数据库
  */
 bool RaftNode::publish_entries(const std::vector<proto::EntryPtr>& entries) {
   for (const proto::EntryPtr& entry : entries) {
@@ -302,7 +298,8 @@ bool RaftNode::publish_entries(const std::vector<proto::EntryPtr>& entries) {
           // ignore empty messages
           break;
         }
-        redis_server_->read_commit(entry); // 数据不为空，将日志条目提交给redis_server_ 处理
+        redis_server_->read_commit(entry); // 数据不为空，将日志条目提交给redis_server_ 处理.也就是更新kv数据
+        // 我写的版本已经对应了rocksdb的kv update
         break;
       }
 
@@ -351,7 +348,7 @@ bool RaftNode::publish_entries(const std::vector<proto::EntryPtr>& entries) {
 
     // replay has finished
     if (entry->index == this->last_index_) {
-      LOG_DEBUG("replay has finished");
+      LOG_DEBUG("replay has finished in RaftNode::publish_entries()");
     }
   }
   return true;
@@ -452,7 +449,7 @@ void RaftNode::schedule() {
    */
   Status status = storage_->snapshot(snap); // 获取目前内存中的snapshot到变量snap中。注意在
   if (!status.is_ok()) {
-    LOG_FATAL("get snapshot failed %s", status.to_string().c_str());
+    LOG_FATAL("get snapshot failed %s in RaftNode::schedule()", status.to_string().c_str());
   }
 // 更新配置状态和索引
   *conf_state_ = snap->metadata.conf_state; 
@@ -479,6 +476,8 @@ void RaftNode::schedule() {
   LOG_DEBUG("server start [%lu]", id);
 
   start_timer();
+  /** io_service_.run() 是 Boost.Asio 库中的一个核心函数，主要用于启动 I/O 服务对象 (io_service）
+   * 这个事件循环负责处理所有已注册的异步操作（如异步 I/O、定时器、异步信号处理等）。 */
   io_service_.run();
 }
 /** Raft节点处提案。data指向需要被提议的数据。callback用于处理提案的结果 

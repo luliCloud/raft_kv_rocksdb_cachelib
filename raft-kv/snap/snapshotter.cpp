@@ -12,7 +12,9 @@ struct SnapshotRecord {
   uint32_t crc32;
   char data[0];
 };
-
+/** 注意这个load函数被RaftNode::replay_wal函数call，所以在这个函数里。我们会加载数字最大的那个snapshot到snapshot变量里。
+ * 因为get-snapshot里有sort用greater的算法。然后下面遍历的时候，会取第一个valid的snapshot文件。
+ */
 Status Snapshotter::load(proto::Snapshot& snapshot) {
   std::vector<std::string> names;
   get_snap_names(names);
@@ -24,7 +26,7 @@ Status Snapshotter::load(proto::Snapshot& snapshot) {
     }
   }
 
-  return Status::not_found("snap not found");
+  return Status::not_found("snap not found in Snapshooter::load()"); // Lu: debug log 
 }
 
 std::string Snapshotter::snap_name(uint64_t term, uint64_t index) {

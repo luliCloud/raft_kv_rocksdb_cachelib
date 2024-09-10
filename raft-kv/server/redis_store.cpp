@@ -189,7 +189,7 @@ RedisStore::RedisStore(RaftNode* server, std::vector<uint8_t> snap, uint16_t por
     } catch (std::exception& e) {
       LOG_WARN("invalid snapshot: %s", e.what()); // for test
     }
-    load_kv_to_rocksdb(key_values);  // 注意这里我们已经load rocksdb::DB* db_了
+    load_kv_to_rocksdb(key_values);  // 注意这里我们已经load rocksdb::DB* db_了.可能是这里导致后续WAL没有加上
   }
 
   auto address = boost::asio::ip::address::from_string("0.0.0.0"); // 这个地址对吗？
@@ -215,7 +215,7 @@ void RedisStore::start(std::promise<pthread_t>& promise) {
     this->io_service_.run();
   });
 }
-
+// 所以是在RedisStore中 调用RedisSession 来接收来自RedisCommand的命令
 void RedisStore::start_accept() {
   RedisSessionPtr session(new RedisSession(this, io_service_));
 // acceptor是用来监听传入的连接。 async是可以异步处理，不会阻塞后面新的start-accept。
