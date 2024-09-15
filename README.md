@@ -100,11 +100,12 @@ To run specific test files, navigate to the `/build/tests` directories and run `
     goreman start
 2. **Run Redis Benchmark in bash2**:
     ```
-    redis-benchmark -t set,get -n 100000 -p 63791
+    redis-benchmark -t set,get -n 100000 -p 63791 -d 4096
+    # -n for number of total operations (read/write mix: 50-50). -p for which node to receive request. -d for size of each kv operation (e.g., 4096 is 4KB).
 ### Performance with RocksDB as the KV Store
 The stress test for RocksDB as the key-value store shows:
 1. 4500 QPS for 4KB KV writes.
-2. 26000 QPS for 5KB KV reads.
+2. 26000 QPS for 4KB KV reads.
 3. P99 latency is less than 40 ms.
 
 Compared to using unordered_map as the KV store, RocksDB provides:
