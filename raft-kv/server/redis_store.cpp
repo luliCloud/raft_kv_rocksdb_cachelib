@@ -12,6 +12,8 @@
 #include <rocksdb/iterator.h>  // for rocksdb
 #include <rocksdb/write_batch.h> // for rocksdb
 
+#include "cachelib/allocator/CacheAllocator.h" // for cachelib, simple case
+
 /** 
  * RaftNode 中的redis_server_实际上就是指向Redis_store的指针。因此这个类应该就是负责接收Raft Commit的
  * 数据以及与Redis数据库的交互

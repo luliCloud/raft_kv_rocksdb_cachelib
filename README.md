@@ -9,6 +9,21 @@ The backend data storage leverages both HashMap and RocksDB: hashmap excels at h
 
 
 ## Getting Started
+### Install dependencies
+To build CacheLib for Caching services (Please check https://cachelib.org/docs/installation/ for more instruction on dependencies installation of CacheLib)
+```
+git clone https://github.com/facebook/CacheLib
+
+cd CacheLib
+./contrib/build.sh -d -j -v
+
+# The resulting library and executables:
+./opt/cachelib/bin/cachebench --help
+```
+Note: to ensure the cachelib work correctly, please run this in your bash
+```
+export LD_LIBRARY_PATH=/home/lu/tools/CacheLib/opt/cachelib/lib:$LD_LIBRARY_PATH
+```
 
 ### Build
 To build the project, follow these steps in the root directory `/raft_cpp`:
@@ -50,6 +65,12 @@ install [redis-cli](https://github.com/antirez/redis), a redis console client. T
     ```
     sudo systemctl start redis
     sudo systemctl status redis
+
+### Install CacheLib
+1. **Install CacheLib strictly following the instruction at https://cachelib.org/**
+2. **At the CacheLib version, we included CacheLib for the cache management and utilized RocksDB as the persistent storage.** After installation of our application, please run the following command (replace your own path to CacheLib file instead of ours to link the build files to the correct libfmt.so.10)
+   ```
+   export LD_LIBRARY_PATH=/home/lu/tools/CacheLib/opt/cachelib/lib:$LD_LIBRARY_PATH
 
 ### Running Tests
 **Run Goreman in Bash**\
@@ -164,7 +185,7 @@ Compared to using unordered_map as the KV store, RocksDB provides:
     100.00% <= 13 milliseconds
     27151.78 requests per second
     
-    
+   
     
     
     
